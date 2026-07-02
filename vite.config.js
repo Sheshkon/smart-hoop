@@ -1,8 +1,12 @@
+import { copyFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const base = '/smart-hoop/'
+
 export default defineConfig({
+  base,
   plugins: [
     vue(),
     VitePWA({
@@ -16,5 +20,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,mp3}'],
       },
     }),
+    {
+      name: 'gh-pages-spa-fallback',
+      closeBundle() {
+        copyFileSync('dist/index.html', 'dist/404.html')
+      },
+    },
   ],
 })
