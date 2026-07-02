@@ -2,7 +2,7 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import './assets/main.css'
-import { registerServiceWorker } from './pwa/registerServiceWorker.js'
+import { registerServiceWorker } from './pwa/usePwaUpdate.js'
 import { loadSessionHistory } from './stores/sessionHistory.js'
 
 const app = createApp(App)

@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { generateId } from '../utils/id.js'
+import { recalcSessionStats } from '../utils/sessionStats.js'
 import { addCompletedSession } from './sessionHistory.js'
-
 function createEmptySession() {
   return {
     id: generateId(),
@@ -21,10 +21,8 @@ function createEmptySession() {
 }
 
 function recalcStats(session) {
-  session.makePercentage =
-    session.attempts > 0 ? Math.round((session.makes / session.attempts) * 100) : 0
+  recalcSessionStats(session)
 }
-
 const status = ref('idle')
 const session = ref(createEmptySession())
 

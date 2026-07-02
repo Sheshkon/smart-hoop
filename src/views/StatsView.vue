@@ -110,46 +110,199 @@
               v-for="s in paginatedSessions"
               :key="s.id"
               class="stats-card"
+              :class="{ 'stats-card--editing': editingId === s.id }"
             >
-              <div class="stats-card__header">
-                <div class="stats-card__meta">
-                  <span v-if="s.hooperName" class="stats-card__hooper">{{ s.hooperName }}</span>
+              <div v-if="editingId === s.id" class="stats-card__edit">
+                <div class="stats-card__edit-header">
                   <span class="stats-card__date">{{ formatDate(s.startedAt) }}</span>
-                </div>
-                <div class="stats-card__actions">
                   <span class="stats-card__duration">{{ formatDuration(s.durationMs) }}</span>
+                </div>
+
+                <label class="form-field">
+                  <span class="form-field__label">Имя игрока</span>
+                  <input
+                    v-model="editingName"
+                    type="text"
+                    class="form-field__input"
+                    placeholder="Имя игрока"
+                    maxlength="50"
+                    autocomplete="nickname"
+                    @keydown.escape="cancelEdit"
+                  >
+                </label>
+
+                <div class="stats-card__counter">
+                  <span class="stats-card__counter-label stats-card__counter-label--make">Попадания</span>
+                  <div class="stats-card__counter-controls">
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-small stats-card__counter-btn"
+                      aria-label="Уменьшить попадания"
+                      :disabled="editingMakes <= 0"
+                      @click="editingMakes--"
+                    >
+                      −
+                    </button>
+                    <input
+                      v-model.number="editingMakes"
+                      type="number"
+                      min="0"
+                      class="form-field__input stats-card__counter-input"
+                      @keydown.escape="cancelEdit"
+                    >
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-small stats-card__counter-btn"
+                      aria-label="Увеличить попадания"
+                      @click="editingMakes++"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div class="stats-card__counter">
+                  <span class="stats-card__counter-label stats-card__counter-label--miss">Промахи</span>
+                  <div class="stats-card__counter-controls">
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-small stats-card__counter-btn"
+                      aria-label="Уменьшить промахи"
+                      :disabled="editingMisses <= 0"
+                      @click="editingMisses--"
+                    >
+                      −
+                    </button>
+                    <input
+                      v-model.number="editingMisses"
+                      type="number"
+                      min="0"
+                      class="form-field__input stats-card__counter-input"
+                      @keydown.escape="cancelEdit"
+                    >
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-small stats-card__counter-btn"
+                      aria-label="Увеличить промахи"
+                      @click="editingMisses++"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <p class="stats-card__scores-preview">
+                  Бросков: {{ editingAttempts }} · Точность: {{ editingMakePercentage }}% · Серия: {{ editingBestStreak }}
+                </p>
+
+                <div class="stats-card__edit-actions">
                   <button
                     type="button"
-                    class="btn btn-ghost btn-small stats-card__delete"
-                    aria-label="Удалить сессию"
-                    @click="handleDelete(s)"
+                    class="btn btn-primary btn-small"
+                    @click="saveEdit(s)"
                   >
-                    Удалить
+                    Сохранить
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-small"
+                    @click="cancelEdit"
+                  >
+                    Отмена
                   </button>
                 </div>
               </div>
-              <div class="stats-card__grid">
-                <div class="stats-card__item">
-                  <span class="stats-card__value">{{ s.attempts }}</span>
-                  <span class="stats-card__label">Бросков</span>
+
+              <template v-else>
+                <div class="stats-card__header">
+                  <div class="stats-card__meta">
+                    <div class="stats-card__name-row">
+                      <span
+                        class="stats-card__hooper"
+                        :class="{ 'stats-card__hooper--empty': !s.hooperName }"
+                      >
+                        {{ s.hooperName || 'Без имени' }}
+                      </span>
+                      <div class="stats-card__icon-actions">
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-small stats-card__edit-btn"
+                          aria-label="Редактировать сессию"
+                          @click="startEdit(s)"
+                        >
+                          <svg
+                            class="stats-card__action-icon"
+                            viewBox="0 0 24 24"
+                            width="16"
+                            height="16"
+                            aria-hidden="true"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-small stats-card__delete-btn"
+                          aria-label="Удалить сессию"
+                          @click="handleDelete(s)"
+                        >
+                          <svg
+                            class="stats-card__action-icon"
+                            viewBox="0 0 24 24"
+                            width="16"
+                            height="16"
+                            aria-hidden="true"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="stats-card__submeta">
+                      <span class="stats-card__date">{{ formatDate(s.startedAt) }}</span>
+                      <span class="stats-card__duration">{{ formatDuration(s.durationMs) }}</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="stats-card__item">
-                  <span class="stats-card__value stats-card__value--make">{{ s.makes }}</span>
-                  <span class="stats-card__label">Попадания</span>
+
+                <div class="stats-card__grid">
+                  <div class="stats-card__item">
+                    <span class="stats-card__value">{{ s.attempts }}</span>
+                    <span class="stats-card__label">Бросков</span>
+                  </div>
+                  <div class="stats-card__item">
+                    <span class="stats-card__value stats-card__value--make">{{ s.makes }}</span>
+                    <span class="stats-card__label">Попадания</span>
+                  </div>
+                  <div class="stats-card__item">
+                    <span class="stats-card__value stats-card__value--miss">{{ s.misses }}</span>
+                    <span class="stats-card__label">Промахи</span>
+                  </div>
+                  <div class="stats-card__item">
+                    <span class="stats-card__value">{{ s.makePercentage }}%</span>
+                    <span class="stats-card__label">Точность</span>
+                  </div>
+                  <div class="stats-card__item">
+                    <span class="stats-card__value">{{ s.bestStreak }}</span>
+                    <span class="stats-card__label">Лучшая серия</span>
+                  </div>
                 </div>
-                <div class="stats-card__item">
-                  <span class="stats-card__value stats-card__value--miss">{{ s.misses }}</span>
-                  <span class="stats-card__label">Промахи</span>
-                </div>
-                <div class="stats-card__item">
-                  <span class="stats-card__value">{{ s.makePercentage }}%</span>
-                  <span class="stats-card__label">Точность</span>
-                </div>
-                <div class="stats-card__item">
-                  <span class="stats-card__value">{{ s.bestStreak }}</span>
-                  <span class="stats-card__label">Лучшая серия</span>
-                </div>
-              </div>
+              </template>
             </li>
           </ul>
 
@@ -196,7 +349,9 @@ import {
   removeSession,
   clearSessionHistory,
   importSessions,
+  updateSession,
 } from '../stores/sessionHistory.js'
+import { applySessionCounts } from '../utils/sessionStats.js'
 import { formatDate, formatDuration } from '../utils/time.js'
 import {
   downloadTextFile,
@@ -214,6 +369,31 @@ const pageSize = ref(10)
 const currentPage = ref(1)
 const showFilters = ref(false)
 const importInputRef = ref(null)
+const editingId = ref(null)
+const editingName = ref('')
+const editingMakes = ref(0)
+const editingMisses = ref(0)
+
+const editingAttempts = computed(() =>
+  Math.max(0, Math.floor(Number(editingMakes.value)) || 0) +
+  Math.max(0, Math.floor(Number(editingMisses.value)) || 0),
+)
+
+const editingMakePercentage = computed(() => {
+  const makes = Math.max(0, Math.floor(Number(editingMakes.value)) || 0)
+  const attempts = editingAttempts.value
+  return attempts > 0 ? Math.round((makes / attempts) * 100) : 0
+})
+
+const editingBestStreak = computed(() => {
+  const session = sessionHistory.sessions.find((s) => s.id === editingId.value)
+  const preview = applySessionCounts(
+    { shotEvents: session?.shotEvents || [] },
+    editingMakes.value,
+    editingMisses.value,
+  )
+  return preview.bestStreak
+})
 
 const hasActiveFilters = computed(
   () => Boolean(searchQuery.value.trim() || dateFrom.value || dateTo.value),
@@ -338,6 +518,7 @@ async function handleDelete(session) {
   if (!window.confirm(`Удалить сессию «${label}»?`)) return
 
   try {
+    if (editingId.value === session.id) cancelEdit()
     await removeSession(session.id)
   } catch (err) {
     console.error('Failed to delete session:', err)
@@ -351,9 +532,55 @@ async function handleClearAll() {
   try {
     await clearSessionHistory()
     resetFilters()
+    cancelEdit()
   } catch (err) {
     console.error('Failed to clear session history:', err)
     window.alert('Не удалось очистить историю')
+  }
+}
+
+function startEdit(session) {
+  editingId.value = session.id
+  editingName.value = session.hooperName || ''
+  editingMakes.value = session.makes
+  editingMisses.value = session.misses
+}
+
+function cancelEdit() {
+  editingId.value = null
+  editingName.value = ''
+  editingMakes.value = 0
+  editingMisses.value = 0
+}
+
+function hasEditChanges(session) {
+  const name = editingName.value.trim()
+  const makes = Math.max(0, Math.floor(Number(editingMakes.value)) || 0)
+  const misses = Math.max(0, Math.floor(Number(editingMisses.value)) || 0)
+
+  return (
+    name !== (session.hooperName || '') ||
+    makes !== session.makes ||
+    misses !== session.misses
+  )
+}
+
+async function saveEdit(session) {
+  const hooperName = editingName.value.trim()
+  const makes = Math.max(0, Math.floor(Number(editingMakes.value)) || 0)
+  const misses = Math.max(0, Math.floor(Number(editingMisses.value)) || 0)
+
+  if (!hasEditChanges(session)) {
+    cancelEdit()
+    return
+  }
+
+  try {
+    await updateSession(session.id, { hooperName, makes, misses })
+    cancelEdit()
+  } catch (err) {
+    console.error('Failed to update session:', err)
+    window.alert('Не удалось сохранить изменения')
   }
 }
 </script>
