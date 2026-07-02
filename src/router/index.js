@@ -3,6 +3,7 @@ import HomeView from '../views/HomeView.vue'
 import SessionView from '../views/SessionView.vue'
 import StatsView from '../views/StatsView.vue'
 import SettingsView from '../views/SettingsView.vue'
+import { useActiveSession } from '../stores/activeSession.js'
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
@@ -14,6 +15,15 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
+})
+
+router.beforeEach((to, from) => {
+  if (from.name !== 'session') return true
+
+  const { isInProgress } = useActiveSession()
+  if (isInProgress.value) return false
+
+  return true
 })
 
 export default router
