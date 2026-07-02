@@ -29,3 +29,28 @@ export async function removeSession(id) {
     sessionHistory.sessions.splice(index, 1)
   }
 }
+
+function sortSessions(sessions) {
+  sessions.sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
+}
+
+export async function importSessions(sessions) {
+  const existingIds = new Set(sessionHistory.sessions.map((s) => s.id))
+  let imported = 0
+  let skipped = 0
+
+  for (const session of sessions) {
+    if (existingIds.has(session.id)) {
+      skipped++
+      continue
+    }
+
+    await sessionsRepo.saveSession(session)
+    sessionHistory.sessions.push(session)
+    existingIds.add(session.id)
+    imported++
+  }
+
+  sortSessions(sessionHistory.sessions)
+  return { imported, skipped }
+}
