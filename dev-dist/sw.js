@@ -77,8 +77,11 @@ define(['./workbox-7e5eb42b'], (function (workbox) { 'use strict';
    * See https://goo.gl/S9QRab
    */
   workbox.precacheAndRoute([{
+    "url": "registerSW.js",
+    "revision": "10511ea276049973e1b45eda9df14143"
+  }, {
     "url": "index.html",
-    "revision": "0.blubauur2f8"
+    "revision": "0.3b12ckma7p8"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {

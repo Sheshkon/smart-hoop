@@ -1,5 +1,6 @@
 <template>
   <div class="session-hud">
+    <p v-if="session.hooperName" class="session-hud__hooper">{{ session.hooperName }}</p>
     <div class="session-hud__timer">{{ formattedDuration }}</div>
 
     <div class="session-hud__grid">

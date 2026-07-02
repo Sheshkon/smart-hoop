@@ -18,6 +18,18 @@
     </header>
 
     <main class="page-content session-content">
+      <label v-if="isIdle || isEnded" class="form-field">
+        <span class="form-field__label">Имя игрока</span>
+        <input
+          v-model="hooperNameInput"
+          type="text"
+          class="form-field__input"
+          placeholder="Hooper"
+          maxlength="50"
+          autocomplete="nickname"
+        >
+      </label>
+
       <SessionHUD :session="session" />
 
       <div class="session-controls">
@@ -26,7 +38,7 @@
             v-if="isIdle || isEnded"
             type="button"
             class="btn btn-primary btn-large"
-            @click="startSession"
+            @click="handleStart"
           >
             Старт
           </button>
@@ -84,7 +96,7 @@
       </p>
 
       <p v-if="isEnded" class="session-ended-msg">
-        Сессия завершена и сохранена в памяти приложения.
+        Сессия завершена и сохранена в истории.
         <router-link to="/stats" class="session-ended-link">Посмотреть статистику →</router-link>
       </p>
     </main>
@@ -92,9 +104,11 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import SessionHUD from '../components/SessionHUD.vue'
 import { useActiveSession } from '../composables/useActiveSession.js'
+
+const hooperNameInput = ref('')
 
 const {
   status,
@@ -113,6 +127,16 @@ const {
   recordMake,
   recordMiss,
 } = useActiveSession()
+
+watch(isEnded, (ended) => {
+  if (ended) {
+    hooperNameInput.value = session.value.hooperName
+  }
+})
+
+function handleStart() {
+  startSession(hooperNameInput.value)
+}
 
 const statusLabel = computed(() => {
   const labels = {

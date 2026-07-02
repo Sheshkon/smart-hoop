@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/smart-hoop/dev-sw.js?dev-sw', { scope: '/smart-hoop/', type: 'classic' })

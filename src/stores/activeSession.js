@@ -5,6 +5,7 @@ import { addCompletedSession } from './sessionHistory.js'
 function createEmptySession() {
   return {
     id: generateId(),
+    hooperName: '',
     startedAt: null,
     endedAt: null,
     durationMs: 0,
@@ -63,7 +64,7 @@ function stopTimer() {
   }
 }
 
-function startSession() {
+function startSession(hooperName = '') {
   if (status.value === 'paused') {
     status.value = 'active'
     startTimer()
@@ -71,6 +72,7 @@ function startSession() {
   }
 
   session.value = createEmptySession()
+  session.value.hooperName = typeof hooperName === 'string' ? hooperName.trim() : ''
   session.value.startedAt = new Date().toISOString()
   accumulatedMs = 0
   resumeStartedAt = null
@@ -84,7 +86,7 @@ function pauseSession() {
   status.value = 'paused'
 }
 
-function endSession() {
+async function endSession() {
   if (!canEnd.value) return
 
   stopTimer()
@@ -93,10 +95,14 @@ function endSession() {
   recalcStats(session.value)
   status.value = 'ended'
 
-  addCompletedSession({
-    ...session.value,
-    shotEvents: [...session.value.shotEvents],
-  })
+  try {
+    await addCompletedSession({
+      ...session.value,
+      shotEvents: [...session.value.shotEvents],
+    })
+  } catch (err) {
+    console.error('Failed to save session:', err)
+  }
 }
 
 function recordShot(type) {
