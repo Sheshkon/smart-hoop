@@ -1,6 +1,25 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
+dev-dist
+
+# IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# OS
 .DS_Store
-*.local
+Thumbs.db
+
+# Env & secrets
 .env
 .env.*
+*.local
+
+# Logs
+*.log
+npm-debug.log*
