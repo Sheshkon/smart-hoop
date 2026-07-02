@@ -78,7 +78,7 @@
             :disabled="!canRecordShots"
             @click="recordMake"
           >
-            Mock попадание
+            Попадание
           </button>
           <button
             type="button"
@@ -86,7 +86,7 @@
             :disabled="!canRecordShots"
             @click="recordMiss"
           >
-            Mock промах
+            Промах
           </button>
         </div>
       </div>

@@ -4,20 +4,23 @@
 
 Не начинать с “идеального AI”.
 
-Сначала нужно сделать весь pipeline приложения на mock detections и тестовых траекториях:
+Сначала нужно сделать весь pipeline приложения в manual-режиме и на тестовых траекториях:
 
-1. mock-мяч;
-2. mock-кольцо;
-3. mock-попадания;
-4. mock-промахи;
-5. статистика;
-6. звуки;
-7. запись сессии;
-8. история сессий.
+1. ручной ввод попаданий;
+2. ручной ввод промахов;
+3. статистика;
+4. звуки;
+5. запись сессии;
+6. история сессий.
 
-Только после этого подключать реальную камеру и ONNX-модель.
+Только после этого подключать AI-режим: реальную камеру и ONNX-модель.
 
 Так приложение будет развиваться по слоям, и Cursor Agent не застрянет на сложной AI-части.
+
+В приложении два режима работы:
+
+* **manual** — пользователь сам отмечает попадания и промахи;
+* **ai** — камера и ONNX-модель определяют результат автоматически.
 
 ---
 
@@ -60,7 +63,7 @@ src/
     RecordingControls.jsx
 
   ai/
-    mockDetector.js
+    manualDetector.js
     onnxDetector.js
     detectorWorker.js
     preprocessing.js
@@ -173,11 +176,11 @@ Do not implement camera or AI yet.
 
 ---
 
-# Этап 2 — Mock Session без камеры и AI
+# Этап 2 — Manual-сессия без камеры и AI
 
 ## Цель
 
-Сделать тренировочную сессию без камеры, только с кнопками “Попадание” и “Промах”.
+Сделать тренировочную сессию в manual-режиме: без камеры и AI, только кнопки «Попадание» и «Промах».
 
 ## Что сделать
 
@@ -186,8 +189,8 @@ Do not implement camera or AI yet.
 * кнопку “Старт”;
 * кнопку “Пауза”;
 * кнопку “Завершить”;
-* кнопку “Mock попадание”;
-* кнопку “Mock промах”.
+* кнопку “Попадание”;
+* кнопку “Промах”.
 
 HUD должен показывать:
 
@@ -206,6 +209,7 @@ HUD должен показывать:
 ```js
 {
   id: "session-id",
+  mode: "manual",
   startedAt: "2026-07-02T12:00:00.000Z",
   endedAt: null,
   durationMs: 0,
@@ -227,7 +231,7 @@ Shot event:
   type: "make",
   timestampMs: 15200,
   confidence: 1,
-  source: "mock"
+  source: "manual"
 }
 ```
 
@@ -235,7 +239,7 @@ Shot event:
 
 Этап готов, если:
 
-* можно начать сессию;
+* сессия работает в manual-режиме;
 * можно вручную добавить попадание;
 * можно вручную добавить промах;
 * статистика обновляется сразу;
@@ -246,7 +250,7 @@ Shot event:
 ## Cursor prompt
 
 ```txt
-Implement a mock basketball session without camera and without AI.
+Implement a manual basketball session without camera and without AI.
 
 Use JavaScript only.
 
@@ -254,8 +258,10 @@ In SessionScreen add:
 - Start session
 - Pause session
 - End session
-- Mock Make
-- Mock Miss
+- Make (manual)
+- Miss (manual)
+
+Session mode must be "manual".
 
 Create SessionHUD component showing:
 - makes
@@ -349,11 +355,11 @@ Do not add AI.
 
 ---
 
-# Этап 4 — Mock Detector и Canvas Overlay
+# Этап 4 — Manual Detector и Canvas Overlay
 
 ## Цель
 
-Создать визуальный pipeline для будущего AI, но пока без реальной модели.
+Создать визуальный pipeline для будущего AI-режима, но пока без реальной модели. Используется в рамках manual-режима для отладки overlay и траекторий.
 
 ## Что сделать
 
@@ -361,8 +367,8 @@ Do not add AI.
 
 На canvas рисовать:
 
-* mock-кольцо;
-* mock-мяч;
+* тестовое кольцо;
+* тестовый мяч;
 * траекторию мяча;
 * bounding box кольца;
 * bounding box мяча.
@@ -370,12 +376,12 @@ Do not add AI.
 Создать:
 
 ```txt
-ai/mockDetector.js
+ai/manualDetector.js
 components/DetectionOverlay.jsx
 utils/geometry.js
 ```
 
-Mock detector должен возвращать detections:
+Manual detector должен возвращать detections:
 
 ```js
 [
@@ -407,8 +413,8 @@ Mock detector должен возвращать detections:
 Этап готов, если:
 
 * на экране Session есть canvas;
-* на canvas видно mock-кольцо;
-* на canvas видно mock-мяч;
+* на canvas видно тестовое кольцо;
+* на canvas видно тестовый мяч;
 * мяч может двигаться по тестовой траектории;
 * overlay обновляется в realtime;
 * detections имеют такую же структуру, как будущая ONNX-модель.
@@ -416,11 +422,11 @@ Mock detector должен возвращать detections:
 ## Cursor prompt
 
 ```txt
-Add a mock AI detection pipeline.
+Add a manual detection pipeline for the manual mode.
 
 Use JavaScript only.
 
-Create mockDetector.js that returns mock detections for:
+Create manualDetector.js that returns test detections for:
 - hoop
 - ball
 
@@ -436,7 +442,7 @@ Draw:
 
 Do not use real camera.
 Do not use ONNX.
-The mock detection format must be compatible with a future object detector.
+The detection format must be compatible with a future object detector in AI mode.
 ```
 
 ---
@@ -449,7 +455,7 @@ The mock detection format must be compatible with a future object detector.
 
 ## Что сделать
 
-Добавить mock trajectories:
+Добавить тестовые траектории:
 
 ```txt
 makeTrajectory
@@ -492,7 +498,7 @@ shortMissTrajectory
 ## Cursor prompt
 
 ```txt
-Add mock ball trajectories for testing shot detection.
+Add test ball trajectories for shot detection in manual mode.
 
 Use JavaScript only.
 
@@ -566,7 +572,7 @@ shot/hoopCalibration.js
 * рамку кольца можно двигать;
 * рамку можно изменять;
 * после подтверждения калибровка используется в SessionScreen;
-* mock detector не должен резко менять ручную калибровку.
+* manual detector не должен резко менять ручную калибровку.
 
 ## Cursor prompt
 
@@ -581,7 +587,7 @@ The hoop box must be draggable and resizable.
 
 After confirmation, save calibration in app state and use it in SessionScreen.
 
-Manual calibration should override mock hoop detection.
+Manual calibration should override manual hoop detection.
 
 Do not use real AI yet.
 Do not use camera yet.
@@ -651,7 +657,7 @@ shot/shotClassifier.js
 ## Cursor prompt
 
 ```txt
-Implement shot detection state machine using mock trajectories.
+Implement shot detection state machine using test trajectories in manual mode.
 
 Use JavaScript only.
 
@@ -757,11 +763,11 @@ Do not add ONNX yet.
 
 ---
 
-# Этап 9 — Mock предупреждения
+# Этап 9 — Ручные предупреждения (manual mode)
 
 ## Цель
 
-Сделать систему предупреждений до подключения реальной камеры.
+Сделать систему предупреждений до подключения реальной камеры. В manual-режиме предупреждения запускаются вручную для тестирования.
 
 ## Что сделать
 
@@ -772,11 +778,11 @@ components/WarningOverlay.jsx
 shot/occlusionDetector.js
 ```
 
-Добавить mock-кнопки:
+Добавить кнопки для ручного тестирования предупреждений:
 
-* “Mock camera blocked”;
-* “Mock hoop lost”;
-* “Mock player too close”.
+* “Камера закрыта”;
+* “Кольцо не видно”;
+* “Игрок слишком близко”.
 
 Предупреждения:
 
@@ -803,12 +809,12 @@ Use JavaScript only.
 
 Create WarningOverlay component.
 
-Create occlusionDetector.js, but for now use mock warning triggers.
+Create occlusionDetector.js, but for now use manual warning triggers in manual mode.
 
 Add buttons:
-- Mock camera blocked
-- Mock hoop lost
-- Mock player too close
+- Camera blocked
+- Hoop lost
+- Player too close
 
 When warning is triggered:
 - show large warning overlay
@@ -845,10 +851,10 @@ components/CameraView.jsx
 * fallback 960x540;
 * fallback 640x480.
 
-SessionScreen должен уметь переключаться:
+SessionScreen должен уметь переключаться между режимами:
 
-* mock canvas mode;
-* real camera mode.
+* **manual** — canvas с тестовыми detections, ручной ввод бросков;
+* **ai** — реальная камера (AI подключится на следующих этапах).
 
 ## Acceptance criteria
 
@@ -857,7 +863,7 @@ SessionScreen должен уметь переключаться:
 * приложение запрашивает доступ к камере;
 * задняя камера открывается на телефоне;
 * при ошибке показывается понятное сообщение;
-* mock mode всё ещё работает;
+* manual-режим всё ещё работает;
 * поверх камеры можно рисовать overlay.
 
 ## Cursor prompt
@@ -874,13 +880,13 @@ Use getUserMedia with facingMode environment.
 Try 1280x720 first, then fallback to 960x540, then 640x480.
 
 In SessionScreen add mode switch:
-- Mock mode
-- Camera mode
+- Manual mode
+- AI mode (camera only for now)
 
 Show camera video with canvas overlay on top.
 
 Do not add ONNX yet.
-Do not remove mock mode.
+Do not remove manual mode.
 ```
 
 ---
@@ -951,7 +957,7 @@ Do not add ONNX yet.
 
 ## Цель
 
-Сделать общий интерфейс detector, чтобы mock detector и ONNX detector были взаимозаменяемы.
+Сделать общий интерфейс detector, чтобы manual detector и AI detector были взаимозаменяемы.
 
 ## Что сделать
 
@@ -984,15 +990,15 @@ dispose()
 
 ```txt
 ai/detectorFactory.js
-ai/mockDetector.js
+ai/manualDetector.js
 ai/onnxDetector.js
 ```
 
 Режимы:
 
 ```js
-"mock"
-"onnx"
+"manual"
+"ai"
 ```
 
 ## Acceptance criteria
@@ -1000,9 +1006,9 @@ ai/onnxDetector.js
 Этап готов, если:
 
 * SessionScreen не знает, какой detector используется;
-* mock detector работает через общий интерфейс;
-* onnxDetector пока может быть пустой заглушкой;
-* можно переключить detector mode в настройках.
+* manual detector работает через общий интерфейс;
+* aiDetector (onnxDetector) пока может быть пустой заглушкой;
+* можно переключить режим manual / ai в настройках.
 
 ## Cursor prompt
 
@@ -1013,7 +1019,7 @@ Use JavaScript only.
 
 Create:
 - detectorFactory.js
-- mockDetector.js
+- manualDetector.js
 - onnxDetector.js
 
 Both detectors must expose:
@@ -1024,9 +1030,9 @@ Both detectors must expose:
 Detection result format:
 className, confidence, box.
 
-Update SessionScreen so it uses detectorFactory instead of calling mockDetector directly.
+Update SessionScreen so it uses detectorFactory instead of calling manualDetector directly.
 
-ONNX detector can be a placeholder for now.
+AI detector (onnxDetector) can be a placeholder for now.
 
 Do not implement ONNX inference yet.
 ```
@@ -1037,7 +1043,7 @@ Do not implement ONNX inference yet.
 
 ## Цель
 
-Подключить ONNX Runtime Web, но не ломать mock mode.
+Подключить ONNX Runtime Web, но не ломать manual-режим.
 
 ## Что сделать
 
@@ -1062,8 +1068,8 @@ npm install onnxruntime-web
 Важно:
 
 * inference должен быть throttled;
-* если модель не найдена, приложение должно показать ошибку и предложить mock mode;
-* mock mode должен остаться рабочим.
+* если модель не найдена, приложение должно показать ошибку и предложить переключиться в manual-режим;
+* manual-режим должен остаться рабочим.
 
 ## Acceptance criteria
 
@@ -1072,8 +1078,8 @@ npm install onnxruntime-web
 * ONNX Runtime Web установлен;
 * модель загружается из `public/models`;
 * при отсутствии модели приложение не падает;
-* mock mode всё ещё работает;
-* ONNX mode возвращает detections в том же формате.
+* manual-режим всё ещё работает;
+* AI-режим возвращает detections в том же формате.
 
 ## Cursor prompt
 
@@ -1093,11 +1099,11 @@ The detector should:
 - preprocess video/canvas frame
 - run inference
 - postprocess output
-- return detections in the same format as mockDetector
+- return detections in the same format as manualDetector
 
-If model loading fails, show an error and allow switching back to mock mode.
+If model loading fails, show an error and allow switching back to manual mode.
 
-Do not remove mock mode.
+Do not remove manual mode.
 ```
 
 ---
@@ -1156,7 +1162,7 @@ The main thread should:
 - throttle inference FPS
 - keep UI responsive
 
-Keep mock mode working without worker if needed.
+Keep manual mode working without worker if needed.
 ```
 
 ---
@@ -1220,7 +1226,7 @@ Track hoop:
 
 Connect tracking output to shotStateMachine.
 
-Keep mock mode working.
+Keep manual mode working.
 ```
 
 ---
@@ -1286,7 +1292,7 @@ Show warning overlay and play warning sound.
 
 Debounce repeated warnings.
 
-Keep mock warning buttons for testing.
+Keep manual warning buttons for testing in manual mode.
 ```
 
 ---
@@ -1377,7 +1383,7 @@ Keep raw camera recording working.
 * среднее время между бросками;
 * shot timeline;
 * видео;
-* режим detector: mock или onnx;
+* режим сессии: manual или ai;
 * calibration info.
 
 Добавить экспорт:
@@ -1414,7 +1420,7 @@ Add detailed session view with:
 - average time between shots
 - shot timeline
 - recording video link
-- detector mode
+- session mode (manual or ai)
 - calibration info
 
 Add export to JSON and CSV.
@@ -1434,7 +1440,7 @@ Keep IndexedDB persistence.
 
 Settings:
 
-* detector mode: mock / onnx;
+* режим сессии: manual / ai;
 * звуки on/off;
 * громкость;
 * голосовые подсказки on/off;
@@ -1464,7 +1470,7 @@ Build full SettingsScreen.
 Use JavaScript only.
 
 Settings:
-- detector mode: mock or onnx
+- session mode: manual or ai
 - sounds enabled
 - volume
 - voice prompts enabled
@@ -1512,7 +1518,7 @@ Apply settings in SessionScreen.
 * интерфейс не мелкий;
 * камера не ломает layout;
 * приложение не теряет сессию при случайном закрытии;
-* mock mode и onnx mode доступны.
+* manual-режим и ai-режим доступны.
 
 ## Cursor prompt
 
@@ -1544,7 +1550,7 @@ Make sure the app works well as an installed PWA.
 * открывать заднюю камеру;
 * калибровать кольцо вручную;
 * отслеживать мяч и кольцо через AI-модель;
-* использовать mock mode для тестирования;
+* использовать manual-режим для тренировки без камеры;
 * считать попадания;
 * считать промахи;
 * не считать один бросок дважды;
@@ -1563,14 +1569,14 @@ Make sure the app works well as an installed PWA.
 Выполнять строго по этапам:
 
 1. PWA scaffold
-2. Mock session
+2. Manual session
 3. IndexedDB sessions
-4. Mock detector + canvas
+4. Manual detector + canvas
 5. Test trajectories
 6. Manual hoop calibration
 7. Shot state machine
 8. Sounds
-9. Mock warnings
+9. Manual warnings
 10. Real camera
 11. Raw video recording
 12. Detector abstraction
@@ -1583,10 +1589,10 @@ Make sure the app works well as an installed PWA.
 19. Settings
 20. Mobile polish
 
-Не переходить к ONNX, пока полностью не работают:
+Не переходить к AI-режиму (ONNX), пока полностью не работают в manual-режиме:
 
-* mock session;
-* mock trajectories;
+* manual session;
+* test trajectories;
 * make/miss detection;
 * stats;
 * sounds;

@@ -5,6 +5,7 @@ import { addCompletedSession } from './sessionHistory.js'
 function createEmptySession() {
   return {
     id: generateId(),
+    mode: 'manual',
     hooperName: '',
     startedAt: null,
     endedAt: null,
@@ -113,7 +114,7 @@ function recordShot(type) {
     type,
     timestampMs: session.value.durationMs,
     confidence: 1,
-    source: 'mock',
+    source: 'manual',
   }
 
   session.value.shotEvents.push(event)
