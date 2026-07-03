@@ -6,9 +6,11 @@ import { registerServiceWorker } from './pwa/usePwaUpdate.js'
 import { loadSessionHistory } from './stores/sessionHistory.js'
 import { initTheme } from './stores/theme.js'
 import { initAiModelSettings } from './stores/aiModelSettings.js'
+import { initPoseSettings } from './stores/poseSettings.js'
 
 initTheme()
 initAiModelSettings()
+initPoseSettings()
 
 const app = createApp(App)
 app.use(router)

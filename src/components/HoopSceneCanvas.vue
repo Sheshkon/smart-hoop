@@ -22,6 +22,16 @@
     <span v-if="mode === 'session' && shotStateLabel" class="detection-overlay__state">
       {{ shotStateLabel }}
     </span>
+    <div
+      v-if="hoopWarningText"
+      class="detection-overlay__hoop-warning"
+      role="alert"
+    >
+      {{ hoopWarningText }}
+    </div>
+    <div v-if="poseWarningText" class="detection-overlay__pose-warning" role="alert">
+      {{ poseWarningText }}
+    </div>
     <div v-if="detectorError" class="detection-overlay__ai-error" role="alert">
       <p class="detection-overlay__ai-error-title">AI-модель недоступна</p>
       <p class="detection-overlay__ai-error-text">{{ detectorError }}</p>
@@ -36,10 +46,19 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createDetector } from '../ai/detectorFactory.js'
 import { playTrajectory, resetManualDetector } from '../ai/manualDetector.js'
+import { createPoseDetector } from '../ai/poseDetectorFactory.js'
+import {
+  createPoseTracker,
+  drawPoseSkeleton,
+  mapPosesToCanvas,
+  updatePoseTracking,
+} from '../ai/poseTracking.js'
+import { createTracker } from '../ai/tracking.js'
 import { useFullscreenElement } from '../composables/useFullscreenElement.js'
 import { useHoopCalibrationEditor } from '../composables/useHoopCalibrationEditor.js'
 import { DETECTOR_MODES } from '../ai/detectorModes.js'
 import { aiModelSettings } from '../stores/aiModelSettings.js'
+import { poseSettings } from '../stores/poseSettings.js'
 import FullscreenToggleButton from './FullscreenToggleButton.vue'
 import { TRAJECTORY_KEYS } from '../shot/testTrajectories.js'
 import { createShotStateMachine, SHOT_STATES } from '../shot/shotStateMachine.js'
@@ -92,6 +111,9 @@ const orientation = ref('portrait')
 const shotState = ref(SHOT_STATES.idle)
 const detectorError = ref('')
 const detectorReady = ref(false)
+const hoopWarningText = ref('')
+const poseWarningText = ref('')
+const poseDetectorActive = ref(false)
 
 let animationFrameId = null
 let resizeObserver = null
@@ -100,7 +122,15 @@ let canvasHeight = 0
 let viewport = getSceneViewportForOrientation(1, 1, 'portrait')
 /** @type {ReturnType<typeof createDetector> | null} */
 let detector = null
+/** @type {ReturnType<typeof createPoseDetector> | null} */
+let poseDetector = null
+/** @type {Promise<void> | null} */
+let poseInitPromise = null
 const shotMachine = createShotStateMachine()
+const aiTracker = createTracker()
+const poseTracker = createPoseTracker()
+/** @type {Array<{ id: string, confidence: number, keypoints: Array<{ name: string, x: number, y: number, confidence: number }> }>} */
+let trackedPoses = []
 
 const orientationLabel = computed(() =>
   orientation.value === 'landscape' ? 'Альбомная' : 'Портретная',
@@ -148,6 +178,62 @@ function disposeDetector() {
   detectorReady.value = false
 }
 
+async function initPoseDetector() {
+  if (poseInitPromise) {
+    return poseInitPromise
+  }
+
+  poseInitPromise = (async () => {
+    disposePoseDetector()
+    poseWarningText.value = ''
+    poseDetectorActive.value = false
+
+    poseDetector = createPoseDetector(poseSettings.poseMode, {
+      modelUrl: poseSettings.poseModel,
+      targetFps: poseSettings.poseFps,
+    })
+
+    if (poseSettings.poseMode === 'off') {
+      await poseDetector.init()
+      return
+    }
+
+    try {
+      await poseDetector.init()
+      poseDetectorActive.value = true
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Не удалось загрузить модель позы'
+      console.warn('Pose detector init failed:', err)
+
+      if (message.toLowerCase().includes('not found')) {
+        poseWarningText.value =
+          'Pose model not found. Put pose_landmarker_lite.task into public/models/mediapipe or turn pose mode off.'
+      } else {
+        poseWarningText.value = message
+      }
+
+      disposePoseDetector()
+      poseDetector = createPoseDetector('off')
+      await poseDetector.init()
+      poseDetectorActive.value = false
+    }
+  })()
+
+  try {
+    await poseInitPromise
+  } finally {
+    poseInitPromise = null
+  }
+}
+
+function disposePoseDetector() {
+  poseDetector?.dispose()
+  poseDetector = null
+  poseDetectorActive.value = false
+  poseTracker.players.clear()
+  trackedPoses = []
+}
+
 async function retryDetector() {
   if (props.mode !== 'session') return
   await initDetector()
@@ -187,24 +273,51 @@ function drawHoop(ctx, hoopDetection) {
   drawHoopBox(ctx, hoopDetection.box)
 }
 
+function drawShooter(ctx, personDetection) {
+  const { box } = personDetection
+  const label = `Игрок ${Math.round(personDetection.confidence * 100)}%`
+
+  ctx.fillStyle = 'rgba(66, 165, 245, 0.12)'
+  ctx.strokeStyle = 'rgba(66, 165, 245, 0.9)'
+  ctx.lineWidth = 2
+  ctx.setLineDash([6, 4])
+  ctx.strokeRect(box.x, box.y, box.width, box.height)
+  ctx.setLineDash([])
+  ctx.fillRect(box.x, box.y, box.width, box.height)
+
+  ctx.font = '600 11px system-ui, sans-serif'
+  ctx.fillStyle = 'rgba(13, 13, 26, 0.82)'
+  const textWidth = ctx.measureText(label).width
+  const labelX = box.x
+  const labelY = Math.max(14, box.y - 6)
+  ctx.fillRect(labelX, labelY - 12, textWidth + 8, 14)
+  ctx.fillStyle = '#90caf9'
+  ctx.fillText(label, labelX + 4, labelY - 2)
+}
+
 function drawBall(ctx, ballDetection, ballCenter) {
   const { box } = ballDetection
   const radius = Math.min(box.width, box.height) / 2
+  const isPredicted = Boolean(ballDetection.predicted)
 
-  ctx.fillStyle = 'rgba(233, 69, 96, 0.25)'
-  ctx.strokeStyle = 'rgba(233, 69, 96, 0.85)'
-  ctx.lineWidth = 2
-  ctx.setLineDash([4, 3])
-  ctx.strokeRect(box.x, box.y, box.width, box.height)
-  ctx.setLineDash([])
+  if (!isPredicted) {
+    ctx.fillStyle = 'rgba(233, 69, 96, 0.25)'
+    ctx.strokeStyle = 'rgba(233, 69, 96, 0.85)'
+    ctx.lineWidth = 2
+    ctx.setLineDash([4, 3])
+    ctx.strokeRect(box.x, box.y, box.width, box.height)
+    ctx.setLineDash([])
+  }
 
   ctx.beginPath()
   ctx.arc(ballCenter.x, ballCenter.y, radius, 0, Math.PI * 2)
-  ctx.fillStyle = '#e94560'
+  ctx.fillStyle = isPredicted ? 'rgba(233, 69, 96, 0.55)' : '#e94560'
   ctx.fill()
-  ctx.strokeStyle = '#ff8a9b'
+  ctx.strokeStyle = isPredicted ? 'rgba(255, 138, 155, 0.7)' : '#ff8a9b'
   ctx.lineWidth = 2
+  if (isPredicted) ctx.setLineDash([3, 3])
   ctx.stroke()
+  ctx.setLineDash([])
 
   ctx.beginPath()
   ctx.arc(ballCenter.x, ballCenter.y, 4, 0, Math.PI * 2)
@@ -232,14 +345,54 @@ function drawTrajectory(ctx, history) {
 function drawSessionScene(ctx, result) {
   const hoopDetection = result.detections.find((item) => item.className === 'hoop')
   const ballDetection = result.detections.find((item) => item.className === 'ball')
-  if (!hoopDetection) return
+  const shooterDetection =
+    result.shooterDetection ??
+    result.detections.find((item) => item.className === 'person' && item.role === 'shooter')
+  const poseOverlayActive =
+    poseSettings.poseMode !== 'off' && poseDetectorActive.value
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
-  drawTrajectory(ctx, result.ballHistory)
-  drawHoop(ctx, hoopDetection)
 
-  if (ballDetection && result.ballCenter) {
-    drawBall(ctx, ballDetection, result.ballCenter)
+  if (hoopDetection) {
+    drawTrajectory(ctx, result.ballHistory)
+    drawHoop(ctx, hoopDetection)
+
+    if (shooterDetection && !poseOverlayActive) {
+      drawShooter(ctx, shooterDetection)
+    }
+
+    if (ballDetection && result.ballCenter) {
+      drawBall(ctx, ballDetection, result.ballCenter)
+    }
+  }
+
+  if (trackedPoses.length > 0) {
+    drawPoseSkeleton(ctx, trackedPoses)
+  }
+}
+
+function runPoseDetection(timestampMs) {
+  if (!poseDetector || !poseDetectorActive.value || poseSettings.poseMode === 'off') {
+    trackedPoses = updatePoseTracking(poseTracker, [], timestampMs)
+    return
+  }
+
+  const video = props.video
+  if (!video) {
+    trackedPoses = updatePoseTracking(poseTracker, [], timestampMs)
+    return
+  }
+
+  try {
+    const rawPoses = poseDetector.detect({
+      video,
+      timestampMs,
+    })
+    const canvasPoses = mapPosesToCanvas(rawPoses, video, viewport)
+    trackedPoses = updatePoseTracking(poseTracker, canvasPoses, timestampMs)
+  } catch (err) {
+    console.warn('Pose detection failed:', err)
+    trackedPoses = updatePoseTracking(poseTracker, [], timestampMs)
   }
 }
 
@@ -252,6 +405,20 @@ function drawCalibrationFrame() {
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
   calibrationEditor.drawCalibrationHoop(ctx, viewport, orientation.value)
+}
+
+function applyTracking(rawResult, timestampMs) {
+  if (activeDetectorMode.value !== DETECTOR_MODES.AI) {
+    hoopWarningText.value = ''
+    return rawResult
+  }
+
+  const tracked = aiTracker.update(rawResult, {
+    timestampMs,
+    paused: props.paused,
+  })
+  hoopWarningText.value = tracked.hoopWarning ?? ''
+  return tracked
 }
 
 function processShotDetection(result, timestampMs) {
@@ -284,7 +451,7 @@ function renderSessionFrame(timestampMs) {
     return
   }
 
-  const result = detector.detect({
+  const rawResult = detector.detect({
     width: canvasWidth,
     height: canvasHeight,
     timestampMs,
@@ -293,12 +460,15 @@ function renderSessionFrame(timestampMs) {
     video: props.video,
   })
 
-  if (result.aiError && !detectorError.value) {
-    detectorError.value = result.aiError
-    emit('detector-error', { mode: activeDetectorMode.value, message: result.aiError })
+  if (rawResult.aiError && !detectorError.value) {
+    detectorError.value = rawResult.aiError
+    emit('detector-error', { mode: activeDetectorMode.value, message: rawResult.aiError })
   }
 
+  const result = applyTracking(rawResult, timestampMs)
+
   processShotDetection(result, timestampMs)
+  runPoseDetection(timestampMs)
 
   const ctx = canvasRef.value.getContext('2d')
   if (ctx) {
@@ -372,15 +542,21 @@ async function applyMode(mode) {
 
   if (mode === 'session') {
     resetManualDetector()
+    aiTracker.reset()
+    poseTracker.players.clear()
+    trackedPoses = []
+    hoopWarningText.value = ''
     shotMachine.reset()
     shotState.value = SHOT_STATES.idle
     await initDetector()
+    await initPoseDetector()
     startSessionLoop()
     return
   }
 
   stopSessionLoop()
   disposeDetector()
+  disposePoseDetector()
   calibrationEditor.reloadFromStorage()
   drawCalibrationFrame()
 }
@@ -406,6 +582,10 @@ watch(
   (paused) => {
     if (props.mode !== 'session' || paused) return
     resetManualDetector()
+    aiTracker.reset()
+    poseTracker.players.clear()
+    trackedPoses = []
+    hoopWarningText.value = ''
     shotMachine.reset()
     shotState.value = SHOT_STATES.idle
   },
@@ -423,6 +603,30 @@ watch(
     if (props.mode !== 'session' || activeDetectorMode.value !== DETECTOR_MODES.AI) return
     detectorError.value = ''
     await initDetector()
+  },
+)
+
+watch(
+  () => poseSettings.poseMode,
+  async () => {
+    if (props.mode !== 'session') return
+    await initPoseDetector()
+  },
+)
+
+watch(
+  () => poseSettings.poseModel,
+  async () => {
+    if (props.mode !== 'session' || poseSettings.poseMode === 'off') return
+    await initPoseDetector()
+  },
+)
+
+watch(
+  () => poseSettings.poseFps,
+  async () => {
+    if (props.mode !== 'session' || poseSettings.poseMode === 'off') return
+    await initPoseDetector()
   },
 )
 
@@ -444,6 +648,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopSessionLoop()
   disposeDetector()
+  disposePoseDetector()
   resizeObserver?.disconnect()
   resizeObserver = null
   window.removeEventListener('orientationchange', handleViewportChange)

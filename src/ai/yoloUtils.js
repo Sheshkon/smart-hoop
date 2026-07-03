@@ -3,13 +3,29 @@ export const MODEL_INPUT_SIZE = 704
 /** BODD_yolov8n — 4 classes from model output channels (8 = 4 bbox + 4 classes). */
 export const YOLO_CLASS_NAMES = ['ball', 'hoop', 'person', 'referee']
 
-const APP_CLASS_NAMES = new Set(['ball', 'hoop'])
+export const CLASS_CONF_THRESHOLDS = [0.15, 0.25, 0.25, 0.25]
+
+const APP_CLASS_NAMES = new Set(['ball', 'hoop', 'person'])
 
 /**
  * @param {HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap} source
  * @param {number} [inputSize]
  * @returns {{ tensorData: Float32Array, scaleX: number, scaleY: number, sourceWidth: number, sourceHeight: number }}
  */
+function createInputCanvas(inputSize) {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const canvas = new OffscreenCanvas(inputSize, inputSize)
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    return { canvas, ctx }
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = inputSize
+  canvas.height = inputSize
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  return { canvas, ctx }
+}
+
 export function preprocessFrame(source, inputSize = MODEL_INPUT_SIZE) {
   const sourceWidth = source.videoWidth || source.width
   const sourceHeight = source.videoHeight || source.height
@@ -18,16 +34,20 @@ export function preprocessFrame(source, inputSize = MODEL_INPUT_SIZE) {
     throw new Error('Frame source has no dimensions')
   }
 
-  const canvas = document.createElement('canvas')
-  canvas.width = inputSize
-  canvas.height = inputSize
-
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const { canvas, ctx } = createInputCanvas(inputSize)
   if (!ctx) {
     throw new Error('Canvas 2D context is unavailable')
   }
 
-  ctx.drawImage(source, 0, 0, inputSize, inputSize)
+  const letterboxScale = Math.min(inputSize / sourceWidth, inputSize / sourceHeight)
+  const drawWidth = Math.round(sourceWidth * letterboxScale)
+  const drawHeight = Math.round(sourceHeight * letterboxScale)
+  const padX = (inputSize - drawWidth) / 2
+  const padY = (inputSize - drawHeight) / 2
+
+  ctx.fillStyle = '#727272'
+  ctx.fillRect(0, 0, inputSize, inputSize)
+  ctx.drawImage(source, 0, 0, sourceWidth, sourceHeight, padX, padY, drawWidth, drawHeight)
 
   const { data } = ctx.getImageData(0, 0, inputSize, inputSize)
   const tensorData = new Float32Array(3 * inputSize * inputSize)
@@ -46,14 +66,54 @@ export function preprocessFrame(source, inputSize = MODEL_INPUT_SIZE) {
 
   return {
     tensorData,
-    scaleX: sourceWidth / inputSize,
-    scaleY: sourceHeight / inputSize,
     sourceWidth,
     sourceHeight,
+    inputSize,
+    letterboxScale,
+    padX,
+    padY,
   }
 }
 
-function boxIoU(a, b) {
+/**
+ * @param {{ x: number, y: number, width: number, height: number }} modelBox
+ * @param {{ letterboxScale: number, padX: number, padY: number }} preprocessMeta
+ */
+export function mapModelBoxToVideo(modelBox, preprocessMeta) {
+  const { letterboxScale, padX, padY } = preprocessMeta
+
+  return {
+    x: (modelBox.x - padX) / letterboxScale,
+    y: (modelBox.y - padY) / letterboxScale,
+    width: modelBox.width / letterboxScale,
+    height: modelBox.height / letterboxScale,
+  }
+}
+
+/**
+ * Map a video-frame box to canvas coords (object-fit: cover within viewport).
+ * @param {{ x: number, y: number, width: number, height: number }} videoBox
+ * @param {number} videoWidth
+ * @param {number} videoHeight
+ * @param {{ offsetX: number, offsetY: number, renderWidth: number, renderHeight: number }} viewport
+ */
+export function mapVideoBoxToCanvas(videoBox, videoWidth, videoHeight, viewport) {
+  const { offsetX, offsetY, renderWidth, renderHeight } = viewport
+  const scale = Math.max(renderWidth / videoWidth, renderHeight / videoHeight)
+  const scaledWidth = videoWidth * scale
+  const scaledHeight = videoHeight * scale
+  const cropX = (scaledWidth - renderWidth) / 2
+  const cropY = (scaledHeight - renderHeight) / 2
+
+  return {
+    x: offsetX + videoBox.x * scale - cropX,
+    y: offsetY + videoBox.y * scale - cropY,
+    width: videoBox.width * scale,
+    height: videoBox.height * scale,
+  }
+}
+
+export function boxIoU(a, b) {
   const x1 = Math.max(a.x, b.x)
   const y1 = Math.max(a.y, b.y)
   const x2 = Math.min(a.x + a.width, b.x + b.width)
@@ -115,7 +175,7 @@ export function postprocessYoloOutput(output, options = {}) {
       }
     }
 
-    if (bestScore < confThreshold) continue
+    if (bestScore < (CLASS_CONF_THRESHOLDS[bestClass] ?? confThreshold)) continue
 
     const cx = data[i]
     const cy = data[numBoxes + i]
@@ -139,9 +199,10 @@ export function postprocessYoloOutput(output, options = {}) {
 
 /**
  * @param {ReturnType<typeof postprocessYoloOutput>[number]} detection
- * @param {{ scaleX: number, scaleY: number }} preprocessMeta
+ * @param {{ sourceWidth: number, sourceHeight: number, inputSize?: number, letterboxScale: number, padX: number, padY: number }} preprocessMeta
  * @param {number} canvasWidth
  * @param {number} canvasHeight
+ * @param {{ offsetX: number, offsetY: number, renderWidth: number, renderHeight: number }} viewport
  * @param {number} [inputSize]
  */
 export function mapDetectionToCanvas(
@@ -149,29 +210,26 @@ export function mapDetectionToCanvas(
   preprocessMeta,
   canvasWidth,
   canvasHeight,
+  viewport,
   inputSize = MODEL_INPUT_SIZE,
 ) {
-  const scaleToSourceX = preprocessMeta.scaleX
-  const scaleToSourceY = preprocessMeta.scaleY
-  const scaleToCanvasX = canvasWidth / preprocessMeta.sourceWidth
-  const scaleToCanvasY = canvasHeight / preprocessMeta.sourceHeight
-
-  const sourceBox = {
-    x: detection.box.x * scaleToSourceX,
-    y: detection.box.y * scaleToSourceY,
-    width: detection.box.width * scaleToSourceX,
-    height: detection.box.height * scaleToSourceY,
-  }
+  const videoBox = mapModelBoxToVideo(detection.box, preprocessMeta)
+  const canvasBox = mapVideoBoxToCanvas(
+    videoBox,
+    preprocessMeta.sourceWidth,
+    preprocessMeta.sourceHeight,
+    viewport ?? {
+      offsetX: 0,
+      offsetY: 0,
+      renderWidth: canvasWidth,
+      renderHeight: canvasHeight,
+    },
+  )
 
   return {
     className: YOLO_CLASS_NAMES[detection.classIndex] ?? `class_${detection.classIndex}`,
     confidence: detection.confidence,
-    box: {
-      x: sourceBox.x * scaleToCanvasX,
-      y: sourceBox.y * scaleToCanvasY,
-      width: sourceBox.width * scaleToCanvasX,
-      height: sourceBox.height * scaleToCanvasY,
-    },
+    box: canvasBox,
     modelBox: {
       x: detection.box.x,
       y: detection.box.y,
