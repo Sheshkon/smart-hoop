@@ -67,7 +67,7 @@ function stopTimer() {
   }
 }
 
-function startSession({ title = '', hooperName = '', description = '', tags = [] } = {}) {
+function startSession({ title = '', hooperName = '', description = '', tags = [], mode = 'manual' } = {}) {
   if (status.value === 'paused') {
     status.value = 'active'
     startTimer()
@@ -75,6 +75,7 @@ function startSession({ title = '', hooperName = '', description = '', tags = []
   }
 
   session.value = createEmptySession()
+  session.value.mode = mode === 'ai' ? 'ai' : 'manual'
   session.value.title = typeof title === 'string' ? title.trim() : ''
   session.value.hooperName = typeof hooperName === 'string' ? hooperName.trim() : ''
   session.value.description = typeof description === 'string' ? description.trim() : ''

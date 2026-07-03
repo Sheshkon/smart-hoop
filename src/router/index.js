@@ -7,7 +7,9 @@ import { useActiveSession } from '../stores/activeSession.js'
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
-  { path: '/session', name: 'session', component: SessionView },
+  { path: '/session/manual', name: 'session-manual', component: SessionView, props: { sessionMode: 'manual' } },
+  { path: '/session/ai', name: 'session-ai', component: SessionView, props: { sessionMode: 'ai' } },
+  { path: '/session', redirect: '/' },
   { path: '/stats', name: 'stats', component: StatsView },
   { path: '/settings', name: 'settings', component: SettingsView },
 ]
@@ -18,7 +20,8 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from) => {
-  if (from.name !== 'session') return true
+  const fromSession = typeof from.name === 'string' && from.name.startsWith('session-')
+  if (!fromSession) return true
 
   const { isInProgress } = useActiveSession()
   if (isInProgress.value) return false

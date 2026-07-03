@@ -11,7 +11,8 @@
       <span v-else class="btn btn-ghost btn-small btn-ghost--disabled" aria-disabled="true">
         ← Назад
       </span>
-      <h1 class="page-title">Сессия</h1>
+      <h1 class="page-title">{{ pageTitle }}</h1>
+      <span v-if="modeLabel" class="session-mode-badge">{{ modeLabel }}</span>
       <span v-if="statusLabel" class="session-status" :class="`session-status--${status}`">
         {{ statusLabel }}
       </span>
@@ -59,6 +60,8 @@
         class="form-field--tags"
       />
 
+      <DetectionOverlay v-if="isAiMode" :paused="isPaused || isIdle || isEnded" />
+
       <SessionHUD :session="session" />
 
       <div class="session-controls">
@@ -100,7 +103,7 @@
           </button>
         </div>
 
-        <div class="session-controls__row session-controls__row--shots">
+        <div v-if="!isAiMode" class="session-controls__row session-controls__row--shots">
           <button
             type="button"
             class="btn btn-make btn-large"
@@ -135,11 +138,26 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Capacitor } from '@capacitor/core'
+import DetectionOverlay from '../components/DetectionOverlay.vue'
 import SessionHUD from '../components/SessionHUD.vue'
 import SessionTagsInput from '../components/SessionTagsInput.vue'
 import { useActiveSession } from '../composables/useActiveSession.js'
 import { VolumeButtons } from '../plugins/volume-buttons.js'
 import { loadSessionFormDraft, saveSessionFormDraft } from '../storage/sessionFormDraft.js'
+import { normalizeTags } from '../utils/sessionTags.js'
+
+const props = defineProps({
+  sessionMode: {
+    type: String,
+    default: 'manual',
+    validator: (value) => value === 'manual' || value === 'ai',
+  },
+})
+
+const isAiMode = computed(() => props.sessionMode === 'ai')
+
+const pageTitle = computed(() => (isAiMode.value ? 'Сессия AI' : 'Сессия'))
+const modeLabel = computed(() => (isAiMode.value ? 'AI' : 'Ручной'))
 
 const titleInput = ref('')
 const hooperNameInput = ref('')
@@ -179,15 +197,20 @@ function persistFormDraft() {
     hooperName: hooperNameInput.value,
     description: descriptionInput.value,
     tags: tagsInput.value,
-  })
+  }, props.sessionMode)
+}
+
+function ensureAiDefaultTags(tags) {
+  if (!isAiMode.value) return normalizeTags(tags)
+  return normalizeTags(['ai', ...tags])
 }
 
 onMounted(async () => {
   if (isIdle.value || isEnded.value) {
-    applyFormDraft(loadSessionFormDraft())
+    applyFormDraft(loadSessionFormDraft(props.sessionMode))
   }
 
-  if (!Capacitor.isNativePlatform()) {
+  if (isAiMode.value || !Capacitor.isNativePlatform()) {
     return
   }
 
@@ -226,7 +249,8 @@ function handleStart() {
     title: titleInput.value,
     hooperName: hooperNameInput.value,
     description: descriptionInput.value,
-    tags: tagsInput.value,
+    tags: ensureAiDefaultTags(tagsInput.value),
+    mode: props.sessionMode,
   })
   persistFormDraft()
 }
