@@ -6,9 +6,32 @@
     </header>
 
     <nav class="home-nav">
-      <router-link to="/session" class="btn btn-primary btn-large">
-        Новая сессия
-      </router-link>
+      <div class="home-session-picker">
+        <button
+          v-if="!showSessionModes"
+          type="button"
+          class="btn btn-primary btn-large"
+          @click="showSessionModes = true"
+        >
+          Новая сессия
+        </button>
+
+        <template v-else>
+          <router-link to="/session/manual" class="btn btn-primary btn-large home-session-picker__mode">
+            Ручной
+          </router-link>
+          <router-link to="/ai/session" class="btn btn-secondary btn-large home-session-picker__mode">
+            AI
+          </router-link>
+          <button
+            type="button"
+            class="btn btn-ghost btn-small home-session-picker__cancel"
+            @click="showSessionModes = false"
+          >
+            Отмена
+          </button>
+        </template>
+      </div>
       <router-link to="/stats" class="btn btn-secondary btn-large">
         Статистика
       </router-link>
@@ -20,4 +43,7 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
+const showSessionModes = ref(false)
 </script>

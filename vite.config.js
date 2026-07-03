@@ -13,6 +13,21 @@ export default defineConfig({
     host: true,
   },
   plugins: [
+    {
+      name: 'camera-dev-hint',
+      configureServer(server) {
+        server.httpServer?.once('listening', () => {
+          const address = server.httpServer?.address()
+          const port = typeof address === 'object' && address ? address.port : 5173
+          const basePath = base.replace(/\/$/, '')
+          console.log('')
+          console.log('  Camera (this PC):  http://localhost:' + port + basePath + '/')
+          console.log('  Camera (phone):    npm run cap:sync → Android app')
+          console.log('  (IP over HTTP has no camera — Chrome requires localhost or HTTPS)')
+          console.log('')
+        })
+      },
+    },
     vueDevTools(),
     vue(),
     VitePWA({

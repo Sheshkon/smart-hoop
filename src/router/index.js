@@ -1,13 +1,28 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import SessionView from '../views/SessionView.vue'
+import AiWorkspaceView from '../views/AiWorkspaceView.vue'
+import AiSessionPanel from '../views/AiSessionPanel.vue'
+import AiCalibrationPanel from '../views/AiCalibrationPanel.vue'
 import StatsView from '../views/StatsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import { useActiveSession } from '../stores/activeSession.js'
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
-  { path: '/session', name: 'session', component: SessionView },
+  { path: '/session/manual', name: 'session-manual', component: SessionView },
+  { path: '/session/ai', redirect: '/ai/session' },
+  { path: '/calibration', redirect: '/ai/calibration' },
+  {
+    path: '/ai',
+    component: AiWorkspaceView,
+    redirect: '/ai/session',
+    children: [
+      { path: 'session', name: 'session-ai', component: AiSessionPanel },
+      { path: 'calibration', name: 'calibration', component: AiCalibrationPanel },
+    ],
+  },
+  { path: '/session', redirect: '/' },
   { path: '/stats', name: 'stats', component: StatsView },
   { path: '/settings', name: 'settings', component: SettingsView },
 ]
@@ -18,12 +33,14 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from) => {
-  if (from.name !== 'session') return true
+  const fromAiSession = from.name === 'session-ai'
+  if (!fromAiSession) return true
 
   const { isInProgress } = useActiveSession()
-  if (isInProgress.value) return false
+  if (!isInProgress.value) return true
+  if (to.name === 'calibration') return true
 
-  return true
+  return false
 })
 
 export default router
