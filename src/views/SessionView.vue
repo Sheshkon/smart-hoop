@@ -133,16 +133,20 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Capacitor } from '@capacitor/core'
 import SessionHUD from '../components/SessionHUD.vue'
 import SessionTagsInput from '../components/SessionTagsInput.vue'
 import { useActiveSession } from '../composables/useActiveSession.js'
+import { VolumeButtons } from '../plugins/volume-buttons.js'
 import { loadSessionFormDraft, saveSessionFormDraft } from '../storage/sessionFormDraft.js'
 
 const titleInput = ref('')
 const hooperNameInput = ref('')
 const descriptionInput = ref('')
 const tagsInput = ref([])
+
+let volumeListener = null
 
 const {
   status,
@@ -178,9 +182,30 @@ function persistFormDraft() {
   })
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (isIdle.value || isEnded.value) {
     applyFormDraft(loadSessionFormDraft())
+  }
+
+  if (!Capacitor.isNativePlatform()) {
+    return
+  }
+
+  volumeListener = await VolumeButtons.addListener('volumeButton', (event) => {
+    if (event.action === 'hit') {
+      recordMake()
+    }
+
+    if (event.action === 'miss') {
+      recordMiss()
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  if (volumeListener) {
+    volumeListener.remove()
+    volumeListener = null
   }
 })
 
