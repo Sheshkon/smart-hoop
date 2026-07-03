@@ -4,6 +4,7 @@ node_modules
 # Build output
 dist
 dev-dist
+assets/logo.png
 
 # IDE
 .idea/
@@ -19,6 +20,9 @@ Thumbs.db
 .env
 .env.*
 *.local
+*.jks
+*.keystore
+key.properties
 
 # Logs
 *.log

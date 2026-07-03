@@ -4,7 +4,8 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const base = '/smart-hoop/'
+const isCapacitor = process.env.CAPACITOR === 'true'
+const base = isCapacitor ? './' : '/smart-hoop/'
 
 export default defineConfig({
   base,
