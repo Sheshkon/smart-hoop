@@ -508,17 +508,28 @@ body {
 
 .stats-filters {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
   margin-bottom: 1rem;
   padding: 1rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.stats-filters .form-field {
+  min-width: 0;
+  margin-bottom: 0;
 }
 
 .stats-filters__field {
   min-width: 0;
+}
+
+.stats-filters .form-field__input {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .stats-filters__field--grow {
@@ -531,8 +542,11 @@ body {
 
 .form-field__input--date {
   position: relative;
+  display: block;
   min-width: 0;
+  max-width: 100%;
   width: 100%;
+  overflow: hidden;
   cursor: pointer;
   padding-right: 2.75rem;
   color-scheme: dark;
@@ -555,7 +569,15 @@ body {
 
 .form-field__input--date::-webkit-datetime-edit,
 .form-field__input--date::-webkit-datetime-edit-fields-wrapper {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   cursor: pointer;
+}
+
+.form-field__input--date::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
 }
 
 .stats-filters__reset {
