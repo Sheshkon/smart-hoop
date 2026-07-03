@@ -273,11 +273,16 @@ body {
 
 .ai-scene-toolbar {
   display: flex;
-  margin-top: -0.5rem;
 }
 
 .ai-scene-toolbar .btn {
   flex: 1;
+}
+
+.ai-session-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .detection-overlay {
