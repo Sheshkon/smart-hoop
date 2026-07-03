@@ -1,6 +1,13 @@
 <template>
   <div class="session-hud">
-    <p v-if="session.hooperName" class="session-hud__hooper">{{ session.hooperName }}</p>
+    <p v-if="session.title" class="session-hud__title">{{ session.title }}</p>
+    <p
+      v-if="session.hooperName"
+      class="session-hud__hooper"
+      :class="{ 'session-hud__hooper--secondary': session.title }"
+    >
+      {{ session.hooperName }}
+    </p>
     <div class="session-hud__timer">{{ formattedDuration }}</div>
 
     <div class="session-hud__grid">

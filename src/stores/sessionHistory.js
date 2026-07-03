@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { applySessionCounts } from '../utils/sessionStats.js'
+import { normalizeTags } from '../utils/sessionTags.js'
 import * as sessionsRepo from '../storage/sessionsRepo.js'
 export const sessionHistory = reactive({
   sessions: [],
@@ -8,7 +9,11 @@ export const sessionHistory = reactive({
 
 export async function loadSessionHistory() {
   const sessions = await sessionsRepo.getAllSessions()
-  sessionHistory.sessions.splice(0, sessionHistory.sessions.length, ...sessions)
+  const normalized = sessions.map((session) => ({
+    ...session,
+    tags: normalizeTags(session.tags),
+  }))
+  sessionHistory.sessions.splice(0, sessionHistory.sessions.length, ...normalized)
   sessionHistory.loaded = true
 }
 
@@ -30,12 +35,23 @@ export async function removeSession(id) {
   }
 }
 
-export async function updateSession(id, { hooperName, makes, misses }) {
+export async function updateSession(id, { title, hooperName, description, tags, makes, misses }) {
   const index = sessionHistory.sessions.findIndex((s) => s.id === id)
   if (index === -1) return
 
-  const trimmed = typeof hooperName === 'string' ? hooperName.trim() : ''
-  let session = { ...sessionHistory.sessions[index], hooperName: trimmed }
+  const trimmedTitle = typeof title === 'string' ? title.trim() : ''
+  const trimmedName = typeof hooperName === 'string' ? hooperName.trim() : ''
+  const trimmedDescription = typeof description === 'string' ? description.trim() : ''
+  let session = {
+    ...sessionHistory.sessions[index],
+    title: trimmedTitle,
+    hooperName: trimmedName,
+    description: trimmedDescription,
+  }
+
+  if (tags !== undefined) {
+    session.tags = normalizeTags(tags)
+  }
   session = applySessionCounts(session, makes, misses)
 
   await sessionsRepo.saveSession(session)

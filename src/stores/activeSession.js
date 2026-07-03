@@ -1,12 +1,16 @@
 import { ref, computed } from 'vue'
 import { generateId } from '../utils/id.js'
 import { recalcSessionStats } from '../utils/sessionStats.js'
+import { normalizeTags } from '../utils/sessionTags.js'
 import { addCompletedSession } from './sessionHistory.js'
 function createEmptySession() {
   return {
     id: generateId(),
     mode: 'manual',
+    title: '',
     hooperName: '',
+    description: '',
+    tags: [],
     startedAt: null,
     endedAt: null,
     durationMs: 0,
@@ -63,7 +67,7 @@ function stopTimer() {
   }
 }
 
-function startSession(hooperName = '') {
+function startSession({ title = '', hooperName = '', description = '', tags = [] } = {}) {
   if (status.value === 'paused') {
     status.value = 'active'
     startTimer()
@@ -71,7 +75,10 @@ function startSession(hooperName = '') {
   }
 
   session.value = createEmptySession()
+  session.value.title = typeof title === 'string' ? title.trim() : ''
   session.value.hooperName = typeof hooperName === 'string' ? hooperName.trim() : ''
+  session.value.description = typeof description === 'string' ? description.trim() : ''
+  session.value.tags = normalizeTags(tags)
   session.value.startedAt = new Date().toISOString()
   accumulatedMs = 0
   resumeStartedAt = null

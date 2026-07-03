@@ -1,3 +1,5 @@
+import { normalizeTags, tagsToCsv } from './sessionTags.js'
+
 const EXPORT_VERSION = 1
 
 function escapeCsv(value) {
@@ -33,6 +35,9 @@ export function sessionsToCsv(sessions) {
   const headers = [
     'id',
     'hooperName',
+    'title',
+    'description',
+    'tags',
     'startedAt',
     'endedAt',
     'durationMs',
@@ -44,7 +49,10 @@ export function sessionsToCsv(sessions) {
   ]
 
   const rows = sessions.map((session) =>
-    headers.map((key) => escapeCsv(session[key])).join(','),
+    headers.map((key) => {
+      if (key === 'tags') return escapeCsv(tagsToCsv(session.tags))
+      return escapeCsv(session[key])
+    }).join(','),
   )
 
   return [headers.join(','), ...rows].join('\n')
@@ -65,8 +73,11 @@ export function parseSessionsImport(text) {
 
   return valid.map((session) => {
     const shotEvents = Array.isArray(session.shotEvents) ? session.shotEvents : []
+    const tags = normalizeTags(session.tags)
     return {
       hooperName: '',
+      title: '',
+      description: '',
       endedAt: null,
       durationMs: 0,
       attempts: 0,
@@ -77,6 +88,7 @@ export function parseSessionsImport(text) {
       bestStreak: 0,
       ...session,
       shotEvents,
+      tags,
     }
   })
 }

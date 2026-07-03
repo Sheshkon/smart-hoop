@@ -1,4 +1,4 @@
-<template>
+  <template>
   <div class="page settings-page">
     <header class="page-header page-header--row">
       <router-link to="/" class="btn btn-ghost btn-small">← Назад</router-link>

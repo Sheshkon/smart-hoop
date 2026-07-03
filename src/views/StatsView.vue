@@ -44,24 +44,43 @@
 
         <div v-if="sessionHistory.sessions.length > 0 && showFilters" class="stats-filters">
           <label class="form-field stats-filters__field stats-filters__field--grow">
-            <span class="form-field__label">Поиск по имени</span>
+            <span class="form-field__label">Поиск</span>
             <input
               v-model="searchQuery"
               type="search"
               class="form-field__input"
-              placeholder="Имя игрока"
+              placeholder="Название, имя, описание или #тег"
               autocomplete="off"
             >
           </label>
 
-          <label class="form-field stats-filters__field">
+          <div
+            v-if="availableFilterTags.length > 0"
+            class="stats-filters__field stats-filters__field--grow stats-filters__tags"
+          >
+            <span class="form-field__label">Теги</span>
+            <div class="session-tags__chips">
+              <button
+                v-for="tag in availableFilterTags"
+                :key="tag"
+                type="button"
+                class="session-tags__chip"
+                :class="{ 'session-tags__chip--active': isTagFilterActive(tag) }"
+                @click="toggleTagFilter(tag)"
+              >
+                {{ formatTagLabel(tag) }}
+              </button>
+            </div>
+          </div>
+
+          <label class="form-field stats-filters__field stats-filters__field--date">
             <span class="form-field__label">С даты</span>
-            <input v-model="dateFrom" type="date" class="form-field__input">
+            <input v-model="dateFrom" type="date" class="form-field__input form-field__input--date">
           </label>
 
-          <label class="form-field stats-filters__field">
+          <label class="form-field stats-filters__field stats-filters__field--date">
             <span class="form-field__label">По дату</span>
-            <input v-model="dateTo" type="date" class="form-field__input">
+            <input v-model="dateTo" type="date" class="form-field__input form-field__input--date">
           </label>
 
           <label class="form-field stats-filters__field">
@@ -119,6 +138,19 @@
                 </div>
 
                 <label class="form-field">
+                  <span class="form-field__label">Название сессии</span>
+                  <input
+                    v-model="editingTitle"
+                    type="text"
+                    class="form-field__input"
+                    placeholder="Тренировка"
+                    maxlength="80"
+                    autocomplete="off"
+                    @keydown.escape="cancelEdit"
+                  >
+                </label>
+
+                <label class="form-field">
                   <span class="form-field__label">Имя игрока</span>
                   <input
                     v-model="editingName"
@@ -130,6 +162,20 @@
                     @keydown.escape="cancelEdit"
                   >
                 </label>
+
+                <label class="form-field">
+                  <span class="form-field__label">Описание</span>
+                  <textarea
+                    v-model="editingDescription"
+                    class="form-field__input form-field__textarea"
+                    placeholder="Описание сессии"
+                    maxlength="200"
+                    rows="2"
+                    @keydown.escape="cancelEdit"
+                  />
+                </label>
+
+                <SessionTagsInput v-model="editingTags" class="form-field--tags" />
 
                 <div class="stats-card__counter">
                   <span class="stats-card__counter-label stats-card__counter-label--make">Попадания</span>
@@ -217,12 +263,23 @@
                 <div class="stats-card__header">
                   <div class="stats-card__meta">
                     <div class="stats-card__name-row">
-                      <span
-                        class="stats-card__hooper"
-                        :class="{ 'stats-card__hooper--empty': !s.hooperName }"
-                      >
-                        {{ s.hooperName || 'Без имени' }}
-                      </span>
+                      <div class="stats-card__headings">
+                        <span
+                          v-if="s.title"
+                          class="stats-card__title"
+                        >
+                          {{ s.title }}
+                        </span>
+                        <span
+                          class="stats-card__hooper"
+                          :class="{
+                            'stats-card__hooper--empty': !s.hooperName,
+                            'stats-card__hooper--secondary': s.title,
+                          }"
+                        >
+                          {{ s.hooperName || 'Без имени' }}
+                        </span>
+                      </div>
                       <div class="stats-card__icon-actions">
                         <button
                           type="button"
@@ -276,6 +333,16 @@
                     <div class="stats-card__submeta">
                       <span class="stats-card__date">{{ formatDate(s.startedAt) }}</span>
                       <span class="stats-card__duration">{{ formatDuration(s.durationMs) }}</span>
+                    </div>
+                    <p v-if="s.description" class="stats-card__description">{{ s.description }}</p>
+                    <div v-if="s.tags?.length" class="stats-card__tags">
+                      <span
+                        v-for="tag in s.tags"
+                        :key="tag"
+                        class="session-tags__chip session-tags__chip--readonly"
+                      >
+                        {{ formatTagLabel(tag) }}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -344,6 +411,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import SessionTagsInput from '../components/SessionTagsInput.vue'
 import {
   sessionHistory,
   removeSession,
@@ -352,6 +420,13 @@ import {
   updateSession,
 } from '../stores/sessionHistory.js'
 import { applySessionCounts } from '../utils/sessionStats.js'
+import {
+  collectAllTags,
+  formatTagLabel,
+  normalizeTags,
+  sessionHasAnyTag,
+  tagsEqual,
+} from '../utils/sessionTags.js'
 import { formatDate, formatDuration } from '../utils/time.js'
 import {
   downloadTextFile,
@@ -362,6 +437,7 @@ import {
 } from '../utils/sessionsIo.js'
 
 const searchQuery = ref('')
+const tagFilter = ref([])
 const dateFrom = ref('')
 const dateTo = ref('')
 const sortOrder = ref('newest')
@@ -370,7 +446,10 @@ const currentPage = ref(1)
 const showFilters = ref(false)
 const importInputRef = ref(null)
 const editingId = ref(null)
+const editingTitle = ref('')
 const editingName = ref('')
+const editingDescription = ref('')
+const editingTags = ref([])
 const editingMakes = ref(0)
 const editingMisses = ref(0)
 
@@ -395,16 +474,39 @@ const editingBestStreak = computed(() => {
   return preview.bestStreak
 })
 
+const availableFilterTags = computed(() => collectAllTags(sessionHistory.sessions))
+
 const hasActiveFilters = computed(
-  () => Boolean(searchQuery.value.trim() || dateFrom.value || dateTo.value),
+  () => Boolean(
+    searchQuery.value.trim() ||
+    tagFilter.value.length > 0 ||
+    dateFrom.value ||
+    dateTo.value,
+  ),
 )
 
 const filteredSessions = computed(() => {
   let list = [...sessionHistory.sessions]
-  const query = searchQuery.value.trim().toLowerCase()
+  const query = searchQuery.value.trim().toLowerCase().replace(/^#+/, '')
 
   if (query) {
-    list = list.filter((session) => (session.hooperName || '').toLowerCase().includes(query))
+    list = list.filter((session) => {
+      const title = (session.title || '').toLowerCase()
+      const name = (session.hooperName || '').toLowerCase()
+      const description = (session.description || '').toLowerCase()
+      const tags = normalizeTags(session.tags).join(' ').toLowerCase()
+
+      return (
+        title.includes(query) ||
+        name.includes(query) ||
+        description.includes(query) ||
+        tags.includes(query)
+      )
+    })
+  }
+
+  if (tagFilter.value.length > 0) {
+    list = list.filter((session) => sessionHasAnyTag(session, tagFilter.value))
   }
 
   if (dateFrom.value) {
@@ -443,7 +545,7 @@ const rangeEnd = computed(() =>
   Math.min(currentPage.value * pageSize.value, filteredSessions.value.length),
 )
 
-watch([searchQuery, dateFrom, dateTo, sortOrder, pageSize], () => {
+watch([searchQuery, tagFilter, dateFrom, dateTo, sortOrder, pageSize], () => {
   currentPage.value = 1
 })
 
@@ -455,10 +557,24 @@ watch(totalPages, (pages) => {
 
 function resetFilters() {
   searchQuery.value = ''
+  tagFilter.value = []
   dateFrom.value = ''
   dateTo.value = ''
   sortOrder.value = 'newest'
   currentPage.value = 1
+}
+
+function isTagFilterActive(tag) {
+  return tagFilter.value.some((item) => item.toLowerCase() === tag.toLowerCase())
+}
+
+function toggleTagFilter(tag) {
+  if (isTagFilterActive(tag)) {
+    tagFilter.value = tagFilter.value.filter((item) => item.toLowerCase() !== tag.toLowerCase())
+    return
+  }
+
+  tagFilter.value = [...tagFilter.value, tag]
 }
 
 function getExportSessions() {
@@ -514,7 +630,7 @@ async function handleImport(event) {
 }
 
 async function handleDelete(session) {
-  const label = session.hooperName || formatDate(session.startedAt)
+  const label = session.title || session.hooperName || formatDate(session.startedAt)
   if (!window.confirm(`Удалить сессию «${label}»?`)) return
 
   try {
@@ -541,32 +657,47 @@ async function handleClearAll() {
 
 function startEdit(session) {
   editingId.value = session.id
+  editingTitle.value = session.title || ''
   editingName.value = session.hooperName || ''
+  editingDescription.value = session.description || ''
+  editingTags.value = [...normalizeTags(session.tags)]
   editingMakes.value = session.makes
   editingMisses.value = session.misses
 }
 
 function cancelEdit() {
   editingId.value = null
+  editingTitle.value = ''
   editingName.value = ''
+  editingDescription.value = ''
+  editingTags.value = []
   editingMakes.value = 0
   editingMisses.value = 0
 }
 
 function hasEditChanges(session) {
+  const title = editingTitle.value.trim()
   const name = editingName.value.trim()
+  const description = editingDescription.value.trim()
+  const tags = normalizeTags(editingTags.value)
   const makes = Math.max(0, Math.floor(Number(editingMakes.value)) || 0)
   const misses = Math.max(0, Math.floor(Number(editingMisses.value)) || 0)
 
   return (
+    title !== (session.title || '') ||
     name !== (session.hooperName || '') ||
+    description !== (session.description || '') ||
+    !tagsEqual(tags, session.tags) ||
     makes !== session.makes ||
     misses !== session.misses
   )
 }
 
 async function saveEdit(session) {
+  const title = editingTitle.value.trim()
   const hooperName = editingName.value.trim()
+  const description = editingDescription.value.trim()
+  const tags = normalizeTags(editingTags.value)
   const makes = Math.max(0, Math.floor(Number(editingMakes.value)) || 0)
   const misses = Math.max(0, Math.floor(Number(editingMisses.value)) || 0)
 
@@ -576,7 +707,7 @@ async function saveEdit(session) {
   }
 
   try {
-    await updateSession(session.id, { hooperName, makes, misses })
+    await updateSession(session.id, { title, hooperName, description, tags, makes, misses })
     cancelEdit()
   } catch (err) {
     console.error('Failed to update session:', err)
