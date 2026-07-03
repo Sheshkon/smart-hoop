@@ -7,6 +7,30 @@
 
     <main class="page-content">
       <section class="settings-section">
+        <h2 class="settings-section__title">AI-модель детектора</h2>
+        <p class="settings-section__hint">
+          Используется в AI-сессии. При смене модели детектор перезагрузится автоматически.
+        </p>
+
+        <div class="model-picker" role="radiogroup" aria-label="AI-модель детектора">
+          <button
+            v-for="model in aiModels"
+            :key="model.id"
+            type="button"
+            class="model-picker__option"
+            :class="{ 'model-picker__option--active': aiModelSettings.modelId === model.id }"
+            role="radio"
+            :aria-checked="aiModelSettings.modelId === model.id"
+            @click="setAiDetectorModel(model.id)"
+          >
+            <span class="model-picker__title">{{ model.label }}</span>
+            <span class="model-picker__meta">{{ model.description }} · {{ model.inputSize }}×{{ model.inputSize }}</span>
+            <span class="model-picker__file">{{ model.fileName }}</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="settings-section">
         <h2 class="settings-section__title">Тема оформления</h2>
         <div class="theme-picker" role="radiogroup" aria-label="Тема оформления">
           <button
@@ -29,7 +53,11 @@
 </template>
 
 <script setup>
+import { AI_DETECTOR_MODELS } from '../ai/detectorModels.js'
+import { aiModelSettings, setAiDetectorModel } from '../stores/aiModelSettings.js'
 import { themeSettings, setThemePreference, THEME_OPTIONS } from '../stores/theme.js'
+
+const aiModels = AI_DETECTOR_MODELS
 
 const themeOptions = [
   { value: THEME_OPTIONS.LIGHT, label: 'Светлая' },

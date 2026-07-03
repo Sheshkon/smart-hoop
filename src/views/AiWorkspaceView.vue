@@ -19,12 +19,15 @@
     </header>
 
     <main class="page-content session-content">
-      <CameraView scene-aligned>
+      <CameraView ref="cameraRef" scene-aligned @ready="syncVideoElement">
         <HoopSceneCanvas
           ref="sceneRef"
           :mode="sceneMode"
           :paused="scenePaused"
           :auto-detect-shots="sceneAutoDetect"
+          :video="videoElement"
+          detector-mode="ai"
+          camera-overlay
           @shot-detected="handleAutoShot"
         />
       </CameraView>
@@ -48,9 +51,16 @@ import HoopSceneCanvas from '../components/HoopSceneCanvas.vue'
 import { useActiveSession } from '../composables/useActiveSession.js'
 
 const route = useRoute()
+const cameraRef = ref(null)
 const sceneRef = ref(null)
+const videoElement = ref(null)
 
 provide('hoopSceneRef', sceneRef)
+
+function syncVideoElement() {
+  const exposedVideo = cameraRef.value?.videoRef
+  videoElement.value = exposedVideo?.value ?? exposedVideo ?? null
+}
 
 const isSessionRoute = computed(() => route.name === 'session-ai')
 const isCalibrationRoute = computed(() => route.name === 'calibration')
@@ -89,9 +99,9 @@ const statusLabel = computed(() => {
 
 function handleAutoShot({ type, confidence }) {
   if (type === 'make') {
-    recordMake({ source: 'auto', confidence })
+    recordMake({ source: 'ai', confidence })
   } else if (type === 'miss') {
-    recordMiss({ source: 'auto', confidence })
+    recordMiss({ source: 'ai', confidence })
   }
 }
 </script>

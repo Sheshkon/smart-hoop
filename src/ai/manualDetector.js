@@ -122,10 +122,9 @@ function pushBallHistory(point, timestampMs) {
 }
 
 /**
- * Returns test detections compatible with future ONNX detector output.
  * @param {{ width: number, height: number, timestampMs?: number, orientation?: string, paused?: boolean }} input
  */
-export function detect(input) {
+export function runManualDetection(input) {
   const { width, height, timestampMs = performance.now(), paused = false } = input
   const orientation = input.orientation || getOrientation(width, height)
   const calibration = getCalibration()
@@ -170,5 +169,28 @@ export function detect(input) {
     viewport,
     orientation,
     trajectoryPlaying: isTrajectoryPlaying(timestampMs),
+  }
+}
+
+/** @deprecated Use runManualDetection or createManualDetector().detect() */
+export function detect(input) {
+  return runManualDetection(input)
+}
+
+export function createManualDetector() {
+  return {
+    mode: 'manual',
+
+    async init() {
+      resetManualDetector()
+    },
+
+    detect(input) {
+      return runManualDetection(input)
+    },
+
+    dispose() {
+      resetManualDetector()
+    },
   }
 }

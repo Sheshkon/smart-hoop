@@ -81,21 +81,6 @@
           Завершить
         </button>
       </div>
-
-      <div v-if="isActive" class="session-controls__row session-controls__row--tests">
-        <button type="button" class="btn btn-secondary" @click="playTestMake">
-          Test Make
-        </button>
-        <button type="button" class="btn btn-secondary" @click="playTestMissLeft">
-          Test Miss Left
-        </button>
-        <button type="button" class="btn btn-secondary" @click="playTestMissRight">
-          Test Miss Right
-        </button>
-        <button type="button" class="btn btn-secondary" @click="playTestShortMiss">
-          Test Short Miss
-        </button>
-      </div>
     </div>
 
     <p v-if="isInProgress" class="session-lock-msg">
@@ -110,14 +95,12 @@
 </template>
 
 <script setup>
-import { inject, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import SessionHUD from '../components/SessionHUD.vue'
 import SessionTagsInput from '../components/SessionTagsInput.vue'
 import { useActiveSession } from '../composables/useActiveSession.js'
 import { loadSessionFormDraft, saveSessionFormDraft } from '../storage/sessionFormDraft.js'
 import { normalizeTags } from '../utils/sessionTags.js'
-
-const hoopSceneRef = inject('hoopSceneRef', null)
 
 const titleInput = ref('')
 const hooperNameInput = ref('')
@@ -125,7 +108,6 @@ const descriptionInput = ref('')
 const tagsInput = ref([])
 
 const {
-  status,
   session,
   isActive,
   isPaused,
@@ -181,21 +163,5 @@ function handleStart() {
     mode: 'ai',
   })
   persistFormDraft()
-}
-
-function playTestMake() {
-  hoopSceneRef?.value?.playTestMake()
-}
-
-function playTestMissLeft() {
-  hoopSceneRef?.value?.playTestMissLeft()
-}
-
-function playTestMissRight() {
-  hoopSceneRef?.value?.playTestMissRight()
-}
-
-function playTestShortMiss() {
-  hoopSceneRef?.value?.playTestShortMiss()
 }
 </script>

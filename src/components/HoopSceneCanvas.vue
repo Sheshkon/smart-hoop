@@ -1,8 +1,9 @@
 <template>
   <div
     ref="containerRef"
-    class="detection-overlay detection-overlay--camera"
+    class="detection-overlay"
     :class="{
+      'detection-overlay--camera': cameraOverlay,
       'detection-overlay--landscape': orientation === 'landscape',
       'detection-overlay--interactive': mode === 'calibration',
     }"
@@ -21,14 +22,24 @@
     <span v-if="mode === 'session' && shotStateLabel" class="detection-overlay__state">
       {{ shotStateLabel }}
     </span>
+    <div v-if="detectorError" class="detection-overlay__ai-error" role="alert">
+      <p class="detection-overlay__ai-error-title">AI-модель недоступна</p>
+      <p class="detection-overlay__ai-error-text">{{ detectorError }}</p>
+      <button type="button" class="btn btn-secondary btn-small" @click="retryDetector">
+        Повторить загрузку
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { detect, playTrajectory, resetManualDetector } from '../ai/manualDetector.js'
+import { createDetector } from '../ai/detectorFactory.js'
+import { playTrajectory, resetManualDetector } from '../ai/manualDetector.js'
 import { useFullscreenElement } from '../composables/useFullscreenElement.js'
 import { useHoopCalibrationEditor } from '../composables/useHoopCalibrationEditor.js'
+import { DETECTOR_MODES } from '../ai/detectorModes.js'
+import { aiModelSettings } from '../stores/aiModelSettings.js'
 import FullscreenToggleButton from './FullscreenToggleButton.vue'
 import { TRAJECTORY_KEYS } from '../shot/testTrajectories.js'
 import { createShotStateMachine, SHOT_STATES } from '../shot/shotStateMachine.js'
@@ -50,9 +61,22 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  detectorMode: {
+    type: String,
+    default: 'manual',
+    validator: (value) => value === 'manual' || value === 'ai',
+  },
+  cameraOverlay: {
+    type: Boolean,
+    default: false,
+  },
+  video: {
+    type: Object,
+    default: null,
+  },
 })
 
-const emit = defineEmits(['shot-detected', 'fullscreen-change'])
+const emit = defineEmits(['shot-detected', 'fullscreen-change', 'detector-error', 'detector-ready'])
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
@@ -62,15 +86,20 @@ const { isFullscreen, isPseudoFullscreen, toggle: toggleFullscreen } = useFullsc
 const calibrationEditor = useHoopCalibrationEditor()
 
 const fullscreenTarget = computed(() => cameraFullscreenRoot?.value ?? containerRef.value)
+const activeDetectorMode = computed(() => props.detectorMode)
 
 const orientation = ref('portrait')
 const shotState = ref(SHOT_STATES.idle)
+const detectorError = ref('')
+const detectorReady = ref(false)
 
 let animationFrameId = null
 let resizeObserver = null
 let canvasWidth = 0
 let canvasHeight = 0
 let viewport = getSceneViewportForOrientation(1, 1, 'portrait')
+/** @type {ReturnType<typeof createDetector> | null} */
+let detector = null
 const shotMachine = createShotStateMachine()
 
 const orientationLabel = computed(() =>
@@ -88,6 +117,41 @@ const shotStateLabels = {
 }
 
 const shotStateLabel = computed(() => shotStateLabels[shotState.value] || '')
+
+async function initDetector() {
+  disposeDetector()
+  detectorError.value = ''
+  detectorReady.value = false
+
+  detector = createDetector(activeDetectorMode.value)
+
+  try {
+    await detector.init()
+    detectorReady.value = true
+    emit('detector-ready', { mode: activeDetectorMode.value })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Не удалось загрузить AI-модель'
+    detectorError.value = message
+    emit('detector-error', { mode: activeDetectorMode.value, message })
+
+    if (activeDetectorMode.value === DETECTOR_MODES.AI) {
+      detector = createDetector(DETECTOR_MODES.MANUAL)
+      await detector.init()
+      detectorReady.value = true
+    }
+  }
+}
+
+function disposeDetector() {
+  detector?.dispose()
+  detector = null
+  detectorReady.value = false
+}
+
+async function retryDetector() {
+  if (props.mode !== 'session') return
+  await initDetector()
+}
 
 function syncCanvasSize() {
   const canvas = canvasRef.value
@@ -215,18 +279,24 @@ function processShotDetection(result, timestampMs) {
 }
 
 function renderSessionFrame(timestampMs) {
-  if (!canvasRef.value || canvasWidth === 0 || canvasHeight === 0) {
+  if (!canvasRef.value || canvasWidth === 0 || canvasHeight === 0 || !detector) {
     animationFrameId = requestAnimationFrame(renderSessionFrame)
     return
   }
 
-  const result = detect({
+  const result = detector.detect({
     width: canvasWidth,
     height: canvasHeight,
     timestampMs,
     orientation: orientation.value,
     paused: props.paused,
+    video: props.video,
   })
+
+  if (result.aiError && !detectorError.value) {
+    detectorError.value = result.aiError
+    emit('detector-error', { mode: activeDetectorMode.value, message: result.aiError })
+  }
 
   processShotDetection(result, timestampMs)
 
@@ -251,9 +321,10 @@ function stopSessionLoop() {
 }
 
 function runTestTrajectory(key) {
+  if (activeDetectorMode.value !== DETECTOR_MODES.MANUAL) return false
   shotMachine.reset()
   shotState.value = SHOT_STATES.idle
-  playTrajectory(key)
+  return playTrajectory(key)
 }
 
 function onPointerDown(event) {
@@ -296,18 +367,20 @@ function handleViewportChange() {
   nextTick(() => syncCanvasSize())
 }
 
-function applyMode(mode) {
+async function applyMode(mode) {
   calibrationEditor.resetDrag()
 
   if (mode === 'session') {
     resetManualDetector()
     shotMachine.reset()
     shotState.value = SHOT_STATES.idle
+    await initDetector()
     startSessionLoop()
     return
   }
 
   stopSessionLoop()
+  disposeDetector()
   calibrationEditor.reloadFromStorage()
   drawCalibrationFrame()
 }
@@ -323,7 +396,9 @@ watch(isPseudoFullscreen, (value) => {
 
 watch(
   () => props.mode,
-  (mode) => applyMode(mode),
+  (mode) => {
+    applyMode(mode)
+  },
 )
 
 watch(
@@ -336,7 +411,22 @@ watch(
   },
 )
 
-onMounted(() => {
+watch(activeDetectorMode, async () => {
+  if (props.mode !== 'session') return
+  detectorError.value = ''
+  await initDetector()
+})
+
+watch(
+  () => aiModelSettings.modelId,
+  async () => {
+    if (props.mode !== 'session' || activeDetectorMode.value !== DETECTOR_MODES.AI) return
+    detectorError.value = ''
+    await initDetector()
+  },
+)
+
+onMounted(async () => {
   syncCanvasSize()
 
   resizeObserver = new ResizeObserver(syncCanvasSize)
@@ -348,11 +438,12 @@ onMounted(() => {
   window.addEventListener('resize', handleViewportChange)
   screen.orientation?.addEventListener('change', handleViewportChange)
 
-  applyMode(props.mode)
+  await applyMode(props.mode)
 })
 
 onBeforeUnmount(() => {
   stopSessionLoop()
+  disposeDetector()
   resizeObserver?.disconnect()
   resizeObserver = null
   window.removeEventListener('orientationchange', handleViewportChange)

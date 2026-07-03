@@ -9,8 +9,15 @@ const base = isCapacitor ? './' : '/smart-hoop/'
 
 export default defineConfig({
   base,
+  assetsInclude: ['**/*.wasm'],
+  optimizeDeps: {
+    exclude: ['onnxruntime-web'],
+  },
   server: {
     host: true,
+    headers: {
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    },
   },
   plugins: [
     {
@@ -35,10 +42,12 @@ export default defineConfig({
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: false,
       devOptions: {
-        enabled: true,
+        enabled: false,
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,mp3}'],
+        globIgnores: ['**/models/**', '**/*.wasm', '**/*.onnx'],
+        maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,
       },
     }),
     {
