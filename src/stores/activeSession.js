@@ -112,15 +112,15 @@ async function endSession() {
   }
 }
 
-function recordShot(type) {
+function recordShot(type, { source = 'manual', confidence = 1 } = {}) {
   if (status.value !== 'active') return
 
   const event = {
     id: generateId(),
     type,
     timestampMs: session.value.durationMs,
-    confidence: 1,
-    source: 'manual',
+    confidence,
+    source,
   }
 
   session.value.shotEvents.push(event)
@@ -140,12 +140,12 @@ function recordShot(type) {
   recalcStats(session.value)
 }
 
-function recordMake() {
-  recordShot('make')
+function recordMake(options) {
+  recordShot('make', options)
 }
 
-function recordMiss() {
-  recordShot('miss')
+function recordMiss(options) {
+  recordShot('miss', options)
 }
 
 export function useActiveSession() {

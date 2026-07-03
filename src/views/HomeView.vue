@@ -20,7 +20,7 @@
           <router-link to="/session/manual" class="btn btn-primary btn-large home-session-picker__mode">
             Ручной
           </router-link>
-          <router-link to="/session/ai" class="btn btn-secondary btn-large home-session-picker__mode">
+          <router-link to="/ai/session" class="btn btn-secondary btn-large home-session-picker__mode">
             AI
           </router-link>
           <button
