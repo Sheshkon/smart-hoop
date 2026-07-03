@@ -54,6 +54,7 @@ body {
     calc(1rem + var(--safe-left));
   max-width: 480px;
   margin: 0 auto;
+  overflow-x: clip;
 }
 
 .page-header {
@@ -507,19 +508,20 @@ body {
 }
 
 .stats-filters {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
   margin-bottom: 1rem;
   padding: 1rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  overflow: hidden;
+  max-width: 100%;
 }
 
 .stats-filters .form-field {
   min-width: 0;
+  width: 100%;
   margin-bottom: 0;
 }
 
@@ -528,16 +530,44 @@ body {
 }
 
 .stats-filters .form-field__input {
+  display: block;
   min-width: 0;
   max-width: 100%;
 }
 
-.stats-filters__field--grow {
-  grid-column: 1 / -1;
+.stats-filters__dates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
-.stats-filters__field--date {
-  grid-column: 1 / -1;
+.stats-filters__date-wrap {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.stats-filters__row {
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.stats-filters__row > .form-field {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0;
+}
+
+.stats-filters__date-wrap:focus-within {
+  border-color: var(--color-primary);
 }
 
 .form-field__input--date {
@@ -546,14 +576,25 @@ body {
   min-width: 0;
   max-width: 100%;
   width: 100%;
-  overflow: hidden;
+  min-height: 3rem;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
   cursor: pointer;
-  padding-right: 2.75rem;
+  padding: 0.75rem 2.25rem 0.75rem 1rem;
+  line-height: 1.5;
   color-scheme: dark;
+  -webkit-appearance: none;
+  appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c8c8d4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 1rem center;
-  background-size: 1rem 1rem;
+  background-position: right 0.75rem center;
+  background-size: 0.875rem 0.875rem;
+}
+
+.form-field__input--date:focus {
+  border-color: transparent;
 }
 
 .form-field__input--date::-webkit-calendar-picker-indicator {
@@ -570,19 +611,19 @@ body {
 .form-field__input--date::-webkit-datetime-edit,
 .form-field__input--date::-webkit-datetime-edit-fields-wrapper {
   min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
+  line-height: 1.5;
   cursor: pointer;
+  pointer-events: none;
 }
 
 .form-field__input--date::-webkit-date-and-time-value {
   min-width: 0;
   text-align: left;
+  pointer-events: none;
 }
 
 .stats-filters__reset {
-  grid-column: 1 / -1;
-  justify-self: start;
+  align-self: flex-start;
 }
 
 .stats-filters__tags {

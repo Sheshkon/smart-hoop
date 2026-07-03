@@ -73,32 +73,40 @@
             </div>
           </div>
 
-          <label class="form-field stats-filters__field stats-filters__field--date">
-            <span class="form-field__label">С даты</span>
-            <input v-model="dateFrom" type="date" class="form-field__input form-field__input--date">
-          </label>
+          <div class="stats-filters__dates">
+            <label class="form-field stats-filters__field stats-filters__field--date">
+              <span class="form-field__label">С даты</span>
+              <span class="stats-filters__date-wrap" @click="openDatePicker">
+                <input v-model="dateFrom" type="date" class="form-field__input form-field__input--date">
+              </span>
+            </label>
 
-          <label class="form-field stats-filters__field stats-filters__field--date">
-            <span class="form-field__label">По дату</span>
-            <input v-model="dateTo" type="date" class="form-field__input form-field__input--date">
-          </label>
+            <label class="form-field stats-filters__field stats-filters__field--date">
+              <span class="form-field__label">По дату</span>
+              <span class="stats-filters__date-wrap" @click="openDatePicker">
+                <input v-model="dateTo" type="date" class="form-field__input form-field__input--date">
+              </span>
+            </label>
+          </div>
 
-          <label class="form-field stats-filters__field">
-            <span class="form-field__label">Сортировка</span>
-            <select v-model="sortOrder" class="form-field__input">
-              <option value="newest">Сначала новые</option>
-              <option value="oldest">Сначала старые</option>
-            </select>
-          </label>
+          <div class="stats-filters__row">
+            <label class="form-field stats-filters__field">
+              <span class="form-field__label">Сортировка</span>
+              <select v-model="sortOrder" class="form-field__input">
+                <option value="newest">Новые</option>
+                <option value="oldest">Старые</option>
+              </select>
+            </label>
 
-          <label class="form-field stats-filters__field">
-            <span class="form-field__label">На странице</span>
-            <select v-model.number="pageSize" class="form-field__input">
-              <option :value="5">5</option>
-              <option :value="10">10</option>
-              <option :value="20">20</option>
-            </select>
-          </label>
+            <label class="form-field stats-filters__field">
+              <span class="form-field__label">На странице</span>
+              <select v-model.number="pageSize" class="form-field__input">
+                <option :value="5">5</option>
+                <option :value="10">10</option>
+                <option :value="20">20</option>
+              </select>
+            </label>
+          </div>
 
           <button
             v-if="hasActiveFilters"
@@ -562,6 +570,22 @@ function resetFilters() {
   dateTo.value = ''
   sortOrder.value = 'newest'
   currentPage.value = 1
+}
+
+function openDatePicker(event) {
+  const input = event.currentTarget.querySelector('input[type="date"]')
+  if (!input) return
+
+  try {
+    if (typeof input.showPicker === 'function') {
+      input.showPicker()
+      return
+    }
+  } catch {
+    // showPicker can throw if not triggered by user gesture in some browsers
+  }
+
+  input.focus()
 }
 
 function isTagFilterActive(tag) {

@@ -8,6 +8,9 @@ const base = '/smart-hoop/'
 
 export default defineConfig({
   base,
+  server: {
+    host: true,
+  },
   plugins: [
     vueDevTools(),
     vue(),
