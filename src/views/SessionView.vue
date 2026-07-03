@@ -36,7 +36,7 @@
           v-model="hooperNameInput"
           type="text"
           class="form-field__input"
-          placeholder="Hooper"
+          placeholder="Игрок"
           maxlength="50"
           autocomplete="nickname"
         >
@@ -47,7 +47,7 @@
         <textarea
           v-model="descriptionInput"
           class="form-field__input form-field__textarea"
-          placeholder="Например: свободные броски, тренировка с левой руки…"
+          placeholder="Например: свободные броски, командная тренировка"
           maxlength="200"
           rows="2"
         />

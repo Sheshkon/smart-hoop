@@ -4,6 +4,9 @@ import router from './router'
 import './assets/main.css'
 import { registerServiceWorker } from './pwa/usePwaUpdate.js'
 import { loadSessionHistory } from './stores/sessionHistory.js'
+import { initTheme } from './stores/theme.js'
+
+initTheme()
 
 const app = createApp(App)
 app.use(router)
