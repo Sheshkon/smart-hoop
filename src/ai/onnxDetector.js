@@ -1,6 +1,9 @@
 import { getSceneViewportForOrientation } from '../utils/sceneViewport.js'
 import { getAiDetectorModelUrl } from './detectorModels.js'
-import { getSelectedAiDetectorModel } from '../stores/aiModelSettings.js'
+import {
+  getSelectedAiDetectorModel,
+  getSelectedClassConfThresholds,
+} from '../stores/aiModelSettings.js'
 import { createDetectorWorkerClient } from './workerClient.js'
 
 export function createOnnxDetector() {
@@ -17,14 +20,19 @@ export function createOnnxDetector() {
 
       const model = getSelectedAiDetectorModel()
       const modelUrl = getAiDetectorModelUrl(model)
+      const classConfThresholds = getSelectedClassConfThresholds()
 
       try {
-        await workerClient.init(modelUrl, model.inputSize)
+        await workerClient.init(modelUrl, model.inputSize, classConfThresholds)
       } catch (err) {
         initError = err instanceof Error ? err : new Error(String(err))
         this.initError = initError
         throw initError
       }
+    },
+
+    updateThresholds(classConfThresholds) {
+      workerClient.setThresholds(classConfThresholds)
     },
 
     detect(input) {

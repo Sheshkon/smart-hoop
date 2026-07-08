@@ -1,5 +1,6 @@
 import * as ort from 'onnxruntime-web'
 import './ortSetup.js'
+import { DEFAULT_CLASS_CONF_THRESHOLDS, normalizeClassConfThresholds } from './detectorModels.js'
 import {
   filterAppDetections,
   mapDetectionToCanvas,
@@ -11,8 +12,10 @@ import {
 let session = null
 let inputName = 'images'
 let outputName = 'output0'
-let inputSize = 704
+let inputSize = 416
 let inferInFlight = false
+/** @type {number[]} */
+let classConfThresholds = [...DEFAULT_CLASS_CONF_THRESHOLDS]
 
 async function createInferenceSession(modelUrl) {
   const executionProviders =
@@ -26,8 +29,11 @@ async function createInferenceSession(modelUrl) {
   })
 }
 
-async function handleInit(modelUrl, size) {
+async function handleInit(modelUrl, size, thresholds) {
   inputSize = size
+  if (thresholds) {
+    classConfThresholds = normalizeClassConfThresholds(thresholds)
+  }
   session = await createInferenceSession(modelUrl)
   inputName = session.inputNames[0] ?? 'images'
   outputName = session.outputNames[0] ?? 'output0'
@@ -59,7 +65,7 @@ async function handleDetect(data) {
 
     const outputs = await session.run({ [inputName]: tensor })
     const output = outputs[outputName]
-    const rawDetections = postprocessYoloOutput(output)
+    const rawDetections = postprocessYoloOutput(output, { classConfThresholds })
     const detections = filterAppDetections(
       rawDetections.map((item) =>
         mapDetectionToCanvas(
@@ -88,11 +94,16 @@ self.onmessage = async (event) => {
 
   if (type === 'init') {
     try {
-      await handleInit(event.data.modelUrl, event.data.inputSize)
+      await handleInit(event.data.modelUrl, event.data.inputSize, event.data.classConfThresholds)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       self.postMessage({ type: 'init-error', message })
     }
+    return
+  }
+
+  if (type === 'set-thresholds') {
+    classConfThresholds = normalizeClassConfThresholds(event.data.classConfThresholds)
     return
   }
 

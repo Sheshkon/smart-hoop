@@ -1,11 +1,10 @@
-export const MODEL_INPUT_SIZE = 704
+import {
+  DEFAULT_CLASS_CONF_THRESHOLDS,
+  DETECTOR_CLASSES,
+  normalizeClassConfThresholds,
+} from './detectorModels.js'
 
-/** BODD_yolov8n — 4 classes from model output channels (8 = 4 bbox + 4 classes). */
-export const YOLO_CLASS_NAMES = ['ball', 'hoop', 'person', 'referee']
-
-export const CLASS_CONF_THRESHOLDS = [0.15, 0.25, 0.25, 0.25]
-
-const APP_CLASS_NAMES = new Set(['ball', 'hoop', 'person'])
+const APP_CLASS_NAMES = new Set(['ball', 'hoop'])
 
 /**
  * @param {HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap} source
@@ -26,7 +25,7 @@ function createInputCanvas(inputSize) {
   return { canvas, ctx }
 }
 
-export function preprocessFrame(source, inputSize = MODEL_INPUT_SIZE) {
+export function preprocessFrame(source, inputSize) {
   const sourceWidth = source.videoWidth || source.width
   const sourceHeight = source.videoHeight || source.height
 
@@ -151,11 +150,14 @@ export function nonMaxSuppression(boxes, iouThreshold = 0.45) {
 
 /**
  * @param {import('onnxruntime-web').Tensor} output
- * @param {{ confThreshold?: number, iouThreshold?: number }} [options]
+ * @param {{ confThreshold?: number, iouThreshold?: number, classConfThresholds?: number[] }} [options]
  */
 export function postprocessYoloOutput(output, options = {}) {
   const confThreshold = options.confThreshold ?? 0.25
   const iouThreshold = options.iouThreshold ?? 0.45
+  const classConfThresholds = normalizeClassConfThresholds(
+    options.classConfThresholds ?? DEFAULT_CLASS_CONF_THRESHOLDS,
+  )
 
   const [, numChannels, numBoxes] = output.dims
   const numClasses = numChannels - 4
@@ -175,7 +177,7 @@ export function postprocessYoloOutput(output, options = {}) {
       }
     }
 
-    if (bestScore < (CLASS_CONF_THRESHOLDS[bestClass] ?? confThreshold)) continue
+    if (bestScore < (classConfThresholds[bestClass] ?? confThreshold)) continue
 
     const cx = data[i]
     const cy = data[numBoxes + i]
@@ -211,8 +213,9 @@ export function mapDetectionToCanvas(
   canvasWidth,
   canvasHeight,
   viewport,
-  inputSize = MODEL_INPUT_SIZE,
+  inputSize,
 ) {
+  const resolvedInputSize = inputSize ?? preprocessMeta.inputSize
   const videoBox = mapModelBoxToVideo(detection.box, preprocessMeta)
   const canvasBox = mapVideoBoxToCanvas(
     videoBox,
@@ -226,8 +229,12 @@ export function mapDetectionToCanvas(
     },
   )
 
+  const classMeta = DETECTOR_CLASSES[detection.classIndex]
+  const className = classMeta?.appClass ?? `class_${detection.classIndex}`
+
   return {
-    className: YOLO_CLASS_NAMES[detection.classIndex] ?? `class_${detection.classIndex}`,
+    className,
+    modelClassName: classMeta?.label ?? `class_${detection.classIndex}`,
     confidence: detection.confidence,
     box: canvasBox,
     modelBox: {
@@ -235,7 +242,7 @@ export function mapDetectionToCanvas(
       y: detection.box.y,
       width: detection.box.width,
       height: detection.box.height,
-      inputSize,
+      inputSize: resolvedInputSize,
     },
   }
 }

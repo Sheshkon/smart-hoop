@@ -64,8 +64,9 @@ export function createDetectorWorkerClient(options = {}) {
   /**
    * @param {string} modelUrl
    * @param {number} inputSize
+   * @param {number[]} [classConfThresholds]
    */
-  async function init(modelUrl, inputSize) {
+  async function init(modelUrl, inputSize, classConfThresholds) {
     dispose()
 
     disposed = false
@@ -85,8 +86,16 @@ export function createDetectorWorkerClient(options = {}) {
       initReject = reject
     })
 
-    worker.postMessage({ type: 'init', modelUrl, inputSize })
+    worker.postMessage({ type: 'init', modelUrl, inputSize, classConfThresholds })
     await initPromise
+  }
+
+  /**
+   * @param {number[]} classConfThresholds
+   */
+  function setThresholds(classConfThresholds) {
+    if (!worker || !ready) return
+    worker.postMessage({ type: 'set-thresholds', classConfThresholds })
   }
 
   /**
@@ -184,5 +193,5 @@ export function createDetectorWorkerClient(options = {}) {
     initReject = null
   }
 
-  return { init, detect, dispose }
+  return { init, detect, setThresholds, dispose }
 }

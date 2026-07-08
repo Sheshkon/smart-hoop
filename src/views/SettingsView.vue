@@ -31,6 +31,36 @@
       </section>
 
       <section class="settings-section">
+        <h2 class="settings-section__title">Пороги уверенности детектора</h2>
+        <p class="settings-section__hint">
+          Минимальная уверенность модели для каждого класса. Применяется сразу, без перезагрузки модели.
+        </p>
+
+        <label
+          v-for="cls in detectorClasses"
+          :key="cls.index"
+          class="form-field settings-fps-field"
+        >
+          <span class="form-field__label">
+            {{ cls.label }} ({{ cls.roleLabel }}): {{ formatThreshold(aiModelSettings.classConfThresholds[cls.index]) }}
+          </span>
+          <input
+            :value="aiModelSettings.classConfThresholds[cls.index]"
+            type="range"
+            class="settings-fps-field__range"
+            :min="CONF_THRESHOLD_MIN"
+            :max="CONF_THRESHOLD_MAX"
+            :step="CONF_THRESHOLD_STEP"
+            @input="setClassConfThreshold(cls.index, Number($event.target.value))"
+          >
+        </label>
+
+        <button type="button" class="btn btn-secondary btn-small" @click="resetClassConfThresholds">
+          Сбросить пороги
+        </button>
+      </section>
+
+      <section class="settings-section">
         <h2 class="settings-section__title">Скелет игрока (MediaPipe)</h2>
         <p class="settings-section__hint">
           Отдельная система от детектора мяча и кольца. Накладывает скелет поверх видео в AI-сессии.
@@ -97,9 +127,20 @@
 
 <script setup>
 import { computed } from 'vue'
-import { AI_DETECTOR_MODELS } from '../ai/detectorModels.js'
+import {
+  AI_DETECTOR_MODELS,
+  CONF_THRESHOLD_MAX,
+  CONF_THRESHOLD_MIN,
+  CONF_THRESHOLD_STEP,
+  DETECTOR_CLASSES,
+} from '../ai/detectorModels.js'
 import { POSE_MODES } from '../ai/poseDetectorFactory.js'
-import { aiModelSettings, setAiDetectorModel } from '../stores/aiModelSettings.js'
+import {
+  aiModelSettings,
+  resetClassConfThresholds,
+  setAiDetectorModel,
+  setClassConfThreshold,
+} from '../stores/aiModelSettings.js'
 import {
   getPoseModelFileName,
   POSE_FPS_MAX,
@@ -111,7 +152,12 @@ import {
 import { themeSettings, setThemePreference, THEME_OPTIONS } from '../stores/theme.js'
 
 const aiModels = AI_DETECTOR_MODELS
+const detectorClasses = DETECTOR_CLASSES
 const poseModelFileName = computed(() => getPoseModelFileName())
+
+function formatThreshold(value) {
+  return `${Math.round(value * 100)}%`
+}
 
 const poseModeOptions = [
   {

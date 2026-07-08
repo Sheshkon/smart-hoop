@@ -1,10 +1,4 @@
-import { DEFAULT_HOOP_BOX, getCalibration } from '../shot/hoopCalibration.js'
 import { boxFromCenter, distance, getBoxCenter } from '../utils/geometry.js'
-import {
-  getSceneViewportForOrientation,
-  portraitBoxToLandscape,
-  sceneBoxToCanvas,
-} from '../utils/sceneViewport.js'
 import { boxIoU } from './yoloUtils.js'
 
 const BALL_CONFIDENCE_MIN = 0.15
@@ -12,26 +6,13 @@ const BALL_CONFIDENCE_TRACKING_MIN = 0.08
 const BALL_TRACK_RADIUS_PX = 120
 const BALL_COAST_MAX_MS = 280
 const PERSON_CONFIDENCE_MIN = 0.3
-const HOOP_AI_CONFIDENCE_MIN = 0.3
-const HOOP_VERIFY_IOU_MIN = 0.15
-const HOOP_LOST_FRAME_THRESHOLD = 12
+const HOOP_TRACK_RADIUS_PX = 200
+const HOOP_LOST_FRAME_THRESHOLD = 18
 const BALL_HISTORY_MAX = 120
 const BALL_HISTORY_INTERVAL_MS = 16
 const VELOCITY_SAMPLE_COUNT = 5
 
 const HOOP_LOST_WARNING = 'Кольцо не видно'
-
-/**
- * @param {'portrait' | 'landscape'} orientation
- * @param {ReturnType<typeof getCalibration>} calibration
- */
-function getHoopBoxScene(orientation, calibration) {
-  const portraitBox = calibration.manuallyAdjusted ? calibration.hoopBox : DEFAULT_HOOP_BOX
-  if (orientation === 'landscape') {
-    return portraitBoxToLandscape(portraitBox)
-  }
-  return { ...portraitBox }
-}
 
 function pushBallHistory(history, lastTimestampRef, point, timestampMs) {
   if (
@@ -41,7 +22,7 @@ function pushBallHistory(history, lastTimestampRef, point, timestampMs) {
     return
   }
 
-  lastTimestampRef.value = timestampMs
+  lastHistoryTimestamp.value = timestampMs
   history.push({ x: point.x, y: point.y, t: timestampMs })
 
   if (history.length > BALL_HISTORY_MAX) {
@@ -70,15 +51,25 @@ function computeVelocity(history) {
 }
 
 /**
- * @param {{ className: string, confidence: number, box: object } | undefined} aiHoop
- * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {Array<{ className: string, confidence: number, box: object }>} hoopCandidates
+ * @param {{ x: number, y: number, width: number, height: number } | null} lastHoopBox
  */
-function isAiHoopVisible(aiHoop, hoopBox) {
-  if (!aiHoop || aiHoop.confidence < HOOP_AI_CONFIDENCE_MIN) {
-    return false
-  }
+function pickHoopDetection(hoopCandidates, lastHoopBox) {
+  if (hoopCandidates.length === 0) return null
 
-  return boxIoU(aiHoop.box, hoopBox) >= HOOP_VERIFY_IOU_MIN
+  const confident = [...hoopCandidates].sort((a, b) => b.confidence - a.confidence)
+  if (!lastHoopBox) return confident[0]
+
+  const nearTrack = confident
+    .map((item) => ({
+      item,
+      dist: distance(getBoxCenter(item.box), getBoxCenter(lastHoopBox)),
+      iou: boxIoU(item.box, lastHoopBox),
+    }))
+    .filter((entry) => entry.dist <= HOOP_TRACK_RADIUS_PX || entry.iou >= 0.05)
+    .sort((a, b) => b.iou - a.iou || a.dist - b.dist || b.item.confidence - a.item.confidence)
+
+  return nearTrack[0]?.item ?? confident[0]
 }
 
 /**
@@ -120,7 +111,7 @@ function pickBallDetection(ballCandidates, predictedCenter) {
 /**
  * @param {Array<{ className: string, confidence: number, box: object }>} persons
  * @param {{ x: number, y: number } | null} ballCenter
- * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {{ x: number, y: number, width: number, height: number } | null} hoopBox
  */
 function pickShooter(persons, ballCenter, hoopBox) {
   if (persons.length === 0) return null
@@ -132,6 +123,8 @@ function pickShooter(persons, ballCenter, hoopBox) {
         distance(getBoxCenter(a.box), ballCenter) - distance(getBoxCenter(b.box), ballCenter),
     )[0]
   }
+
+  if (!hoopBox) return persons[0]
 
   const belowHoop = persons.filter(
     (person) => getBoxCenter(person.box).y > hoopBox.y + hoopBox.height * 0.2,
@@ -151,6 +144,9 @@ export function createTracker() {
   let lastBallBox = null
   let lastBallSeenAt = 0
   let lastBallVelocity = null
+  let lastHoopBox = null
+  let lastHoopDetection = null
+  let hasSeenHoop = false
 
   function reset() {
     ballHistory.length = 0
@@ -160,6 +156,9 @@ export function createTracker() {
     lastBallBox = null
     lastBallSeenAt = 0
     lastBallVelocity = null
+    lastHoopBox = null
+    lastHoopDetection = null
+    hasSeenHoop = false
   }
 
   function predictBallCenter(timestampMs) {
@@ -188,27 +187,31 @@ export function createTracker() {
     const timestampMs = context.timestampMs ?? performance.now()
     const paused = context.paused ?? false
     const inferenceFresh = rawResult.inferenceFresh ?? false
-    const calibration = getCalibration()
 
-    const hoopBoxScene = getHoopBoxScene(orientation, calibration)
-    const hoopBox = sceneBoxToCanvas(hoopBoxScene, viewport)
-
-    const aiHoop = detections.find((item) => item.className === 'hoop')
+    const hoopCandidates = detections.filter((item) => item.className === 'hoop')
+    const hoopDetection = pickHoopDetection(hoopCandidates, lastHoopBox)
     let hoopWarning = null
 
-    if (!paused && inferenceFresh) {
-      const aiHoopVisible = isAiHoopVisible(aiHoop, hoopBox)
-
-      if (aiHoopVisible) {
-        hoopLostFrames = Math.max(0, hoopLostFrames - 2)
-      } else {
-        hoopLostFrames += 1
-      }
+    if (!paused && hoopDetection) {
+      lastHoopBox = { ...hoopDetection.box }
+      lastHoopDetection = hoopDetection
+      hoopLostFrames = 0
+      hasSeenHoop = true
+    } else if (!paused && inferenceFresh && hasSeenHoop) {
+      hoopLostFrames += 1
 
       if (hoopLostFrames >= HOOP_LOST_FRAME_THRESHOLD) {
         hoopWarning = HOOP_LOST_WARNING
+        lastHoopBox = null
+        lastHoopDetection = null
+        hasSeenHoop = false
       }
     }
+
+    const displayHoopBox = lastHoopBox ? { ...lastHoopBox } : null
+    const displayHoopDetection = lastHoopDetection
+      ? { ...lastHoopDetection, box: displayHoopBox }
+      : null
 
     const predictedCenter = predictBallCenter(timestampMs)
     const ballCandidates = detections.filter((item) => item.className === 'ball')
@@ -261,15 +264,18 @@ export function createTracker() {
       )
       .sort((a, b) => b.confidence - a.confidence)
 
-    const shooterDetection = pickShooter(personCandidates, ballCenter, hoopBox)
+    const shooterDetection = pickShooter(personCandidates, ballCenter, displayHoopBox)
 
-    const outputDetections = [
-      {
+    const outputDetections = []
+
+    if (displayHoopDetection && displayHoopBox) {
+      outputDetections.push({
         className: 'hoop',
-        confidence: calibration.manuallyAdjusted ? 1 : aiHoop?.confidence ?? 0.5,
-        box: hoopBox,
-      },
-    ]
+        confidence: displayHoopDetection.confidence,
+        box: displayHoopBox,
+        fromAi: true,
+      })
+    }
 
     if (displayBallDetection && ballCenter) {
       outputDetections.push(displayBallDetection)
@@ -286,7 +292,7 @@ export function createTracker() {
       ballVelocity,
       ballTrackState,
       shooterDetection,
-      hoopBox,
+      hoopBox: displayHoopBox,
       viewport,
       orientation,
       hoopLost: hoopWarning != null,

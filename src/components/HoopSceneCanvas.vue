@@ -32,6 +32,10 @@
     <div v-if="poseWarningText" class="detection-overlay__pose-warning" role="alert">
       {{ poseWarningText }}
     </div>
+    <div v-if="detectorLoading" class="detection-overlay__loading" role="status" aria-live="polite">
+      <p class="detection-overlay__loading-title">Загрузка AI-модели…</p>
+      <p v-if="loadingModelLabel" class="detection-overlay__loading-text">{{ loadingModelLabel }}</p>
+    </div>
     <div v-if="detectorError" class="detection-overlay__ai-error" role="alert">
       <p class="detection-overlay__ai-error-title">AI-модель недоступна</p>
       <p class="detection-overlay__ai-error-text">{{ detectorError }}</p>
@@ -57,6 +61,7 @@ import { createTracker } from '../ai/tracking.js'
 import { useFullscreenElement } from '../composables/useFullscreenElement.js'
 import { useHoopCalibrationEditor } from '../composables/useHoopCalibrationEditor.js'
 import { DETECTOR_MODES } from '../ai/detectorModes.js'
+import { getAiDetectorModel } from '../ai/detectorModels.js'
 import { aiModelSettings } from '../stores/aiModelSettings.js'
 import { poseSettings } from '../stores/poseSettings.js'
 import FullscreenToggleButton from './FullscreenToggleButton.vue'
@@ -111,6 +116,7 @@ const orientation = ref('portrait')
 const shotState = ref(SHOT_STATES.idle)
 const detectorError = ref('')
 const detectorReady = ref(false)
+const detectorLoading = ref(false)
 const hoopWarningText = ref('')
 const poseWarningText = ref('')
 const poseDetectorActive = ref(false)
@@ -148,10 +154,17 @@ const shotStateLabels = {
 
 const shotStateLabel = computed(() => shotStateLabels[shotState.value] || '')
 
+const loadingModelLabel = computed(() => {
+  if (activeDetectorMode.value !== DETECTOR_MODES.AI) return ''
+  const model = getAiDetectorModel(aiModelSettings.modelId)
+  return `${model.label} · ${model.inputSize}×${model.inputSize}`
+})
+
 async function initDetector() {
   disposeDetector()
   detectorError.value = ''
   detectorReady.value = false
+  detectorLoading.value = activeDetectorMode.value === DETECTOR_MODES.AI
 
   detector = createDetector(activeDetectorMode.value)
 
@@ -169,6 +182,8 @@ async function initDetector() {
       await detector.init()
       detectorReady.value = true
     }
+  } finally {
+    detectorLoading.value = false
   }
 }
 
@@ -353,17 +368,20 @@ function drawSessionScene(ctx, result) {
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
 
-  if (hoopDetection) {
+  if (result.ballHistory?.length) {
     drawTrajectory(ctx, result.ballHistory)
+  }
+
+  if (hoopDetection) {
     drawHoop(ctx, hoopDetection)
+  }
 
-    if (shooterDetection && !poseOverlayActive) {
-      drawShooter(ctx, shooterDetection)
-    }
+  if (shooterDetection && !poseOverlayActive) {
+    drawShooter(ctx, shooterDetection)
+  }
 
-    if (ballDetection && result.ballCenter) {
-      drawBall(ctx, ballDetection, result.ballCenter)
-    }
+  if (ballDetection && result.ballCenter) {
+    drawBall(ctx, ballDetection, result.ballCenter)
   }
 
   if (trackedPoses.length > 0) {
@@ -422,7 +440,7 @@ function applyTracking(rawResult, timestampMs) {
 }
 
 function processShotDetection(result, timestampMs) {
-  if (!props.autoDetectShots || props.paused) return
+  if (!props.autoDetectShots || props.paused || !result.hoopBox) return
 
   const { ballCenter, hoopBox } = toPortraitShotSpace(
     result.ballCenter,
@@ -603,6 +621,22 @@ watch(
     if (props.mode !== 'session' || activeDetectorMode.value !== DETECTOR_MODES.AI) return
     detectorError.value = ''
     await initDetector()
+  },
+)
+
+watch(
+  () => [...aiModelSettings.classConfThresholds],
+  (thresholds) => {
+    if (
+      props.mode !== 'session' ||
+      activeDetectorMode.value !== DETECTOR_MODES.AI ||
+      !detectorReady.value ||
+      !detector?.updateThresholds
+    ) {
+      return
+    }
+
+    detector.updateThresholds(thresholds)
   },
 )
 
