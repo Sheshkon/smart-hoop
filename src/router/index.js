@@ -4,6 +4,7 @@ import SessionView from '../views/SessionView.vue'
 import AiWorkspaceView from '../views/AiWorkspaceView.vue'
 import AiSessionPanel from '../views/AiSessionPanel.vue'
 import AiTestPanel from '../views/AiTestPanel.vue'
+import AiShotTestPanel from '../views/AiShotTestPanel.vue'
 import StatsView from '../views/StatsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import { useActiveSession } from '../stores/activeSession.js'
@@ -19,6 +20,7 @@ const routes = [
     children: [
       { path: 'session', name: 'session-ai', component: AiSessionPanel },
       { path: 'test', name: 'ai-test', component: AiTestPanel },
+      { path: 'shot-test', name: 'ai-shot-test', component: AiShotTestPanel },
     ],
   },
   { path: '/session', redirect: '/' },

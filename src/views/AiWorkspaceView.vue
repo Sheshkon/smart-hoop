@@ -24,7 +24,10 @@
           Сессия
         </router-link>
         <router-link to="/ai/test" class="ai-workspace-tabs__item">
-          Тест
+          Тестирование определения объектов
+        </router-link>
+        <router-link to="/ai/shot-test" class="ai-workspace-tabs__item">
+          Тестирование броска
         </router-link>
       </nav>
 
@@ -37,6 +40,7 @@
           :video="videoElement"
           detector-mode="ai"
           camera-overlay
+          show-player-boxes
           @shot-detected="handleAutoShot"
         />
       </CameraView>
@@ -65,9 +69,11 @@ function syncVideoElement() {
 
 const isSessionRoute = computed(() => route.name === 'session-ai')
 const isTestRoute = computed(() => route.name === 'ai-test')
+const isShotTestRoute = computed(() => route.name === 'ai-shot-test')
 
 const pageTitle = computed(() => {
-  if (isTestRoute.value) return 'Тест AI'
+  if (isTestRoute.value) return 'Тестирование определения объектов'
+  if (isShotTestRoute.value) return 'Тестирование броска'
   return 'Сессия AI'
 })
 

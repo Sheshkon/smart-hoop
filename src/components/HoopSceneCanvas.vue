@@ -106,6 +106,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  showPlayerBoxes: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits([
@@ -380,15 +384,16 @@ function drawDetectionBox(ctx, detection) {
     ball: 'Мяч',
     hoop: 'Кольцо',
     person: 'Игрок',
+    make: 'Попадание',
+    shot: 'Бросок',
   }
   const colors = {
     ball: '#e94560',
     hoop: '#81c784',
     person: '#42a5f5',
-    basketball_court: '#e94560',
-    basketball: '#ff8a65',
-    net: '#81c784',
-    no_ball: '#ffd54f',
+    make: '#66bb6a',
+    player: '#42a5f5',
+    shot: '#ffb74d',
   }
   const role = detection.appClass ?? detection.className
   const color = colors[role] ?? colors[detection.className] ?? '#ffd54f'
@@ -424,8 +429,13 @@ function drawDetectionBoxes(ctx, detections) {
   }
 }
 
-function drawDetectionBoxScene(ctx, detections) {
+function drawDetectionBoxScene(ctx, detections, ballHistory = []) {
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+
+  if (ballHistory.length) {
+    drawTrajectory(ctx, ballHistory)
+  }
+
   drawDetectionBoxes(ctx, detections)
 
   if (trackedPoses.length > 0) {
@@ -438,6 +448,7 @@ function drawDetectionBoxScene(ctx, detections) {
 function drawSessionScene(ctx, result) {
   const hoopDetection = result.detections.find((item) => item.className === 'hoop')
   const ballDetection = result.detections.find((item) => item.className === 'ball')
+  const playerDetections = result.detections.filter((item) => item.className === 'person')
   const shooterDetection =
     result.shooterDetection ??
     result.detections.find((item) => item.className === 'person' && item.role === 'shooter')
@@ -454,7 +465,11 @@ function drawSessionScene(ctx, result) {
     drawHoop(ctx, hoopDetection)
   }
 
-  if (shooterDetection && !poseOverlayActive) {
+  if (props.showPlayerBoxes) {
+    for (const playerDetection of playerDetections) {
+      drawShooter(ctx, playerDetection)
+    }
+  } else if (shooterDetection && !poseOverlayActive) {
     drawShooter(ctx, shooterDetection)
   }
 
@@ -567,19 +582,21 @@ function renderSessionFrame(timestampMs) {
 
   if (props.showDetectionBoxes) {
     runPoseDetection(timestampMs)
+    const trackedResult = applyTracking(rawResult, timestampMs)
 
     emit('frame-result', {
       detections: rawResult.detections,
       rawDetections: rawResult.detections,
-      ballCenter: null,
-      hoopBox: null,
+      ballCenter: trackedResult.ballCenter,
+      hoopBox: trackedResult.hoopBox,
+      ballHistory: trackedResult.ballHistory,
       poses: trackedPoses,
       timestampMs,
     })
 
     const ctx = canvasRef.value.getContext('2d')
     if (ctx) {
-      drawDetectionBoxScene(ctx, rawResult.detections)
+      drawDetectionBoxScene(ctx, rawResult.detections, trackedResult.ballHistory)
     }
 
     animationFrameId = requestAnimationFrame(renderSessionFrame)
