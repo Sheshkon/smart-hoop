@@ -144,7 +144,7 @@ function getTrackedPoses(tracker, timestamp) {
 /**
  * Map pose keypoints from video pixel space to overlay canvas coordinates.
  * @param {Array<{ id: string, confidence: number, keypoints: Array<{ name: string, x: number, y: number, confidence: number }> }>} poses
- * @param {HTMLVideoElement | null | undefined} video
+ * @param {HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | null | undefined} video
  * @param {{ offsetX: number, offsetY: number, renderWidth: number, renderHeight: number }} viewport
  */
 export function mapPosesToCanvas(poses, video, viewport) {
@@ -152,8 +152,8 @@ export function mapPosesToCanvas(poses, video, viewport) {
     return poses
   }
 
-  const videoWidth = video.videoWidth
-  const videoHeight = video.videoHeight
+  const videoWidth = video.videoWidth || video.naturalWidth || video.width
+  const videoHeight = video.videoHeight || video.naturalHeight || video.height
   if (!videoWidth || !videoHeight) {
     return []
   }

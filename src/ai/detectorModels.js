@@ -1,16 +1,40 @@
-/** @typedef {{ index: number, label: string, roleLabel: string, appClass: 'ball' | 'hoop' | null }} DetectorClassMeta */
+/** @typedef {{ index: number, className: string, label: string, roleLabel: string, appClass: 'ball' | 'hoop' | null }} DetectorClassMeta */
 
 /** @type {DetectorClassMeta[]} */
 export const DETECTOR_CLASSES = [
-  { index: 0, label: 'Basketball Court', roleLabel: 'Мяч', appClass: 'ball' },
-  { index: 1, label: 'Basketball', roleLabel: 'Игнор', appClass: null },
-  { index: 2, label: 'Net', roleLabel: 'Кольцо', appClass: 'hoop' },
-  { index: 3, label: 'No ball', roleLabel: 'Фон', appClass: null },
+  {
+    index: 0,
+    className: 'basketball_court',
+    label: 'Basketball Court',
+    roleLabel: 'Мяч для игровой логики',
+    appClass: 'ball',
+  },
+  {
+    index: 1,
+    className: 'basketball',
+    label: 'Basketball',
+    roleLabel: 'Класс модели',
+    appClass: null,
+  },
+  {
+    index: 2,
+    className: 'net',
+    label: 'Net',
+    roleLabel: 'Кольцо для игровой логики',
+    appClass: 'hoop',
+  },
+  {
+    index: 3,
+    className: 'no_ball',
+    label: 'No ball',
+    roleLabel: 'Класс модели',
+    appClass: null,
+  },
 ]
 
-export const DEFAULT_CLASS_CONF_THRESHOLDS = [0.15, 0.95, 0.15, 0.5]
+export const DEFAULT_CLASS_CONF_THRESHOLDS = [0.15, 0.15, 0.15, 0.15]
 
-export const AI_MODEL_SETTINGS_VERSION = 3
+export const AI_MODEL_SETTINGS_VERSION = 4
 
 export const CONF_THRESHOLD_MIN = 0.05
 export const CONF_THRESHOLD_MAX = 0.95
@@ -20,14 +44,14 @@ export const AI_DETECTOR_MODELS = [
   {
     id: 'hoop-and-ball-416',
     label: 'Hoop & Ball (416)',
-    description: 'Мяч (Basketball Court), кольцо (Net)',
+    description: 'Все классы модели: Basketball Court, Basketball, Net, No ball',
     fileName: 'hoop-and-ball-best-416.onnx',
     inputSize: 416,
   },
   {
     id: 'hoop-and-ball-320',
     label: 'Hoop & Ball (320)',
-    description: 'Мяч (Basketball Court), кольцо (Net)',
+    description: 'Все классы модели: Basketball Court, Basketball, Net, No ball',
     fileName: 'hoop-and-ball-best-320.onnx',
     inputSize: 320,
   },

@@ -4,8 +4,6 @@ import {
   normalizeClassConfThresholds,
 } from './detectorModels.js'
 
-const APP_CLASS_NAMES = new Set(['ball', 'hoop'])
-
 /**
  * @param {HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap} source
  * @param {number} [inputSize]
@@ -230,13 +228,19 @@ export function mapDetectionToCanvas(
   )
 
   const classMeta = DETECTOR_CLASSES[detection.classIndex]
-  const className = classMeta?.appClass ?? `class_${detection.classIndex}`
+  const className = classMeta?.className ?? `class_${detection.classIndex}`
 
   return {
     className,
+    appClass: classMeta?.appClass ?? null,
     modelClassName: classMeta?.label ?? `class_${detection.classIndex}`,
+    displayLabel: classMeta?.label ?? `class_${detection.classIndex}`,
+    roleLabel: classMeta?.roleLabel ?? '',
     confidence: detection.confidence,
     box: canvasBox,
+    videoBox,
+    sourceWidth: preprocessMeta.sourceWidth,
+    sourceHeight: preprocessMeta.sourceHeight,
     modelBox: {
       x: detection.box.x,
       y: detection.box.y,
@@ -248,8 +252,21 @@ export function mapDetectionToCanvas(
 }
 
 /**
- * @param {ReturnType<typeof mapDetectionToCanvas>[]} detections
+ * @param {ReturnType<typeof mapDetectionToCanvas>} detection
+ * @param {{ offsetX: number, offsetY: number, renderWidth: number, renderHeight: number }} viewport
  */
-export function filterAppDetections(detections) {
-  return detections.filter((item) => APP_CLASS_NAMES.has(item.className))
+export function remapDetectionToCanvas(detection, viewport) {
+  if (!detection.videoBox || !detection.sourceWidth || !detection.sourceHeight) {
+    return detection
+  }
+
+  return {
+    ...detection,
+    box: mapVideoBoxToCanvas(
+      detection.videoBox,
+      detection.sourceWidth,
+      detection.sourceHeight,
+      viewport,
+    ),
+  }
 }

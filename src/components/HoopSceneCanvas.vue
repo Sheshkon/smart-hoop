@@ -98,9 +98,23 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  showDetectionBoxes: {
+    type: Boolean,
+    default: false,
+  },
+  detectionBoxMinConfidence: {
+    type: Number,
+    default: 0,
+  },
 })
 
-const emit = defineEmits(['shot-detected', 'fullscreen-change', 'detector-error', 'detector-ready'])
+const emit = defineEmits([
+  'shot-detected',
+  'fullscreen-change',
+  'detector-error',
+  'detector-ready',
+  'frame-result',
+])
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
@@ -358,6 +372,69 @@ function drawTrajectory(ctx, history) {
   ctx.stroke()
 }
 
+function drawDetectionBox(ctx, detection) {
+  const { box } = detection
+  if (!box) return
+
+  const labels = {
+    ball: 'Мяч',
+    hoop: 'Кольцо',
+    person: 'Игрок',
+  }
+  const colors = {
+    ball: '#e94560',
+    hoop: '#81c784',
+    person: '#42a5f5',
+    basketball_court: '#e94560',
+    basketball: '#ff8a65',
+    net: '#81c784',
+    no_ball: '#ffd54f',
+  }
+  const role = detection.appClass ?? detection.className
+  const color = colors[role] ?? colors[detection.className] ?? '#ffd54f'
+  const labelText = labels[role] ?? detection.displayLabel ?? detection.modelClassName ?? detection.className
+  const label = `${labelText} ${Math.round((detection.confidence ?? 0) * 100)}%`
+  const labelX = Math.max(0, box.x)
+  const labelY = Math.max(18, box.y)
+
+  ctx.save()
+  ctx.lineWidth = 3
+  ctx.setLineDash([])
+  ctx.strokeStyle = color
+  ctx.fillStyle = `${color}26`
+  ctx.strokeRect(box.x, box.y, box.width, box.height)
+  ctx.fillRect(box.x, box.y, box.width, box.height)
+
+  ctx.font = '700 12px system-ui, sans-serif'
+  const textWidth = ctx.measureText(label).width
+  ctx.fillStyle = 'rgba(13, 13, 26, 0.9)'
+  ctx.fillRect(labelX, labelY - 18, textWidth + 12, 18)
+  ctx.fillStyle = '#fff'
+  ctx.fillText(label, labelX + 6, labelY - 5)
+  ctx.restore()
+}
+
+function drawDetectionBoxes(ctx, detections) {
+  const drawableDetections = detections.filter((item) =>
+    (item.confidence ?? 0) >= props.detectionBoxMinConfidence,
+  )
+
+  for (const detection of drawableDetections) {
+    drawDetectionBox(ctx, detection)
+  }
+}
+
+function drawDetectionBoxScene(ctx, detections) {
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+  drawDetectionBoxes(ctx, detections)
+
+  if (trackedPoses.length > 0) {
+    drawPoseSkeleton(ctx, trackedPoses, {
+      keypointMinConfidence: poseSettings.keypointConfidenceMin,
+    })
+  }
+}
+
 function drawSessionScene(ctx, result) {
   const hoopDetection = result.detections.find((item) => item.className === 'hoop')
   const ballDetection = result.detections.find((item) => item.className === 'ball')
@@ -488,7 +565,38 @@ function renderSessionFrame(timestampMs) {
     emit('detector-error', { mode: activeDetectorMode.value, message: rawResult.aiError })
   }
 
+  if (props.showDetectionBoxes) {
+    runPoseDetection(timestampMs)
+
+    emit('frame-result', {
+      detections: rawResult.detections,
+      rawDetections: rawResult.detections,
+      ballCenter: null,
+      hoopBox: null,
+      poses: trackedPoses,
+      timestampMs,
+    })
+
+    const ctx = canvasRef.value.getContext('2d')
+    if (ctx) {
+      drawDetectionBoxScene(ctx, rawResult.detections)
+    }
+
+    animationFrameId = requestAnimationFrame(renderSessionFrame)
+    return
+  }
+
   const result = applyTracking(rawResult, timestampMs)
+
+  if (rawResult.inferenceFresh) {
+    emit('frame-result', {
+      detections: result.detections,
+      rawDetections: rawResult.detections,
+      ballCenter: result.ballCenter,
+      hoopBox: result.hoopBox,
+      timestampMs,
+    })
+  }
 
   processShotDetection(result, timestampMs)
   runPoseDetection(timestampMs)
@@ -557,6 +665,12 @@ async function handleToggleFullscreen() {
 
 function handleViewportChange() {
   calibrationEditor.resetDrag()
+  aiTracker.reset()
+  poseTracker.players.clear()
+  trackedPoses = []
+  hoopWarningText.value = ''
+  shotMachine.reset()
+  shotState.value = SHOT_STATES.idle
   nextTick(() => syncCanvasSize())
 }
 
@@ -591,6 +705,7 @@ watch(isFullscreen, (value) => {
 
 watch(isPseudoFullscreen, (value) => {
   fullscreenTarget.value?.classList.toggle('camera-view--pseudo-fullscreen', value)
+  fullscreenTarget.value?.classList.toggle('media-test-view--pseudo-fullscreen', value)
 })
 
 watch(
@@ -694,6 +809,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleViewportChange)
   screen.orientation?.removeEventListener('change', handleViewportChange)
   fullscreenTarget.value?.classList.remove('camera-view--pseudo-fullscreen')
+  fullscreenTarget.value?.classList.remove('media-test-view--pseudo-fullscreen')
 })
 
 defineExpose({

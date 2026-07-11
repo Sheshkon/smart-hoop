@@ -125,7 +125,11 @@ export function createMediaPipePoseDetector(options = {}) {
 
   function resolveInputElement(input) {
     if (!input) return null
-    if (input instanceof HTMLVideoElement || input instanceof HTMLCanvasElement) {
+    if (
+      input instanceof HTMLVideoElement ||
+      input instanceof HTMLImageElement ||
+      input instanceof HTMLCanvasElement
+    ) {
       return input
     }
     if (input instanceof ImageBitmap) {
@@ -141,6 +145,9 @@ export function createMediaPipePoseDetector(options = {}) {
     if (element instanceof HTMLVideoElement) {
       return { width: element.videoWidth, height: element.videoHeight }
     }
+    if (element instanceof HTMLImageElement) {
+      return { width: element.naturalWidth, height: element.naturalHeight }
+    }
     if (element instanceof HTMLCanvasElement) {
       return { width: element.width, height: element.height }
     }
@@ -153,6 +160,9 @@ export function createMediaPipePoseDetector(options = {}) {
   function isVideoReady(element) {
     if (element instanceof HTMLVideoElement) {
       return element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    }
+    if (element instanceof HTMLImageElement) {
+      return element.complete && element.naturalWidth > 0 && element.naturalHeight > 0
     }
     return true
   }

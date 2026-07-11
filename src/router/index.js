@@ -3,7 +3,7 @@ import HomeView from '../views/HomeView.vue'
 import SessionView from '../views/SessionView.vue'
 import AiWorkspaceView from '../views/AiWorkspaceView.vue'
 import AiSessionPanel from '../views/AiSessionPanel.vue'
-import AiCalibrationPanel from '../views/AiCalibrationPanel.vue'
+import AiTestPanel from '../views/AiTestPanel.vue'
 import StatsView from '../views/StatsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import { useActiveSession } from '../stores/activeSession.js'
@@ -12,14 +12,13 @@ const routes = [
   { path: '/', name: 'home', component: HomeView },
   { path: '/session/manual', name: 'session-manual', component: SessionView },
   { path: '/session/ai', redirect: '/ai/session' },
-  { path: '/calibration', redirect: '/ai/calibration' },
   {
     path: '/ai',
     component: AiWorkspaceView,
     redirect: '/ai/session',
     children: [
       { path: 'session', name: 'session-ai', component: AiSessionPanel },
-      { path: 'calibration', name: 'calibration', component: AiCalibrationPanel },
+      { path: 'test', name: 'ai-test', component: AiTestPanel },
     ],
   },
   { path: '/session', redirect: '/' },
@@ -38,8 +37,6 @@ router.beforeEach((to, from) => {
 
   const { isInProgress } = useActiveSession()
   if (!isInProgress.value) return true
-  if (to.name === 'calibration') return true
-
   return false
 })
 

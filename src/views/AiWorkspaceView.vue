@@ -19,10 +19,19 @@
     </header>
 
     <main class="page-content session-content">
-      <CameraView ref="cameraRef" scene-aligned @ready="syncVideoElement">
+      <nav class="ai-workspace-tabs" aria-label="AI разделы">
+        <router-link to="/ai/session" class="ai-workspace-tabs__item">
+          Сессия
+        </router-link>
+        <router-link to="/ai/test" class="ai-workspace-tabs__item">
+          Тест
+        </router-link>
+      </nav>
+
+      <CameraView v-if="isSessionRoute" ref="cameraRef" scene-aligned @ready="syncVideoElement">
         <HoopSceneCanvas
           ref="sceneRef"
-          :mode="sceneMode"
+          mode="session"
           :paused="scenePaused"
           :auto-detect-shots="sceneAutoDetect"
           :video="videoElement"
@@ -32,19 +41,13 @@
         />
       </CameraView>
 
-      <div v-if="isSessionRoute" class="ai-scene-toolbar">
-        <router-link to="/ai/calibration" class="btn btn-secondary btn-large">
-          Калибровка кольца
-        </router-link>
-      </div>
-
       <router-view />
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, provide, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import CameraView from '../components/CameraView.vue'
 import HoopSceneCanvas from '../components/HoopSceneCanvas.vue'
@@ -55,19 +58,18 @@ const cameraRef = ref(null)
 const sceneRef = ref(null)
 const videoElement = ref(null)
 
-provide('hoopSceneRef', sceneRef)
-
 function syncVideoElement() {
   const exposedVideo = cameraRef.value?.videoRef
   videoElement.value = exposedVideo?.value ?? exposedVideo ?? null
 }
 
 const isSessionRoute = computed(() => route.name === 'session-ai')
-const isCalibrationRoute = computed(() => route.name === 'calibration')
+const isTestRoute = computed(() => route.name === 'ai-test')
 
-const sceneMode = computed(() => (isCalibrationRoute.value ? 'calibration' : 'session'))
-
-const pageTitle = computed(() => (isCalibrationRoute.value ? 'Калибровка' : 'Сессия AI'))
+const pageTitle = computed(() => {
+  if (isTestRoute.value) return 'Тест AI'
+  return 'Сессия AI'
+})
 
 const {
   status,
@@ -81,7 +83,6 @@ const {
 } = useActiveSession()
 
 const scenePaused = computed(() => {
-  if (isCalibrationRoute.value) return true
   return isPaused.value || isIdle.value || isEnded.value
 })
 

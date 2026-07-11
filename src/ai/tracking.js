@@ -14,6 +14,10 @@ const VELOCITY_SAMPLE_COUNT = 5
 
 const HOOP_LOST_WARNING = 'Кольцо не видно'
 
+function getDetectionRole(detection) {
+  return detection.appClass ?? detection.className
+}
+
 function pushBallHistory(history, lastTimestampRef, point, timestampMs) {
   if (
     history.length > 0 &&
@@ -22,7 +26,7 @@ function pushBallHistory(history, lastTimestampRef, point, timestampMs) {
     return
   }
 
-  lastHistoryTimestamp.value = timestampMs
+  lastTimestampRef.value = timestampMs
   history.push({ x: point.x, y: point.y, t: timestampMs })
 
   if (history.length > BALL_HISTORY_MAX) {
@@ -188,7 +192,7 @@ export function createTracker() {
     const paused = context.paused ?? false
     const inferenceFresh = rawResult.inferenceFresh ?? false
 
-    const hoopCandidates = detections.filter((item) => item.className === 'hoop')
+    const hoopCandidates = detections.filter((item) => getDetectionRole(item) === 'hoop')
     const hoopDetection = pickHoopDetection(hoopCandidates, lastHoopBox)
     let hoopWarning = null
 
@@ -214,7 +218,7 @@ export function createTracker() {
       : null
 
     const predictedCenter = predictBallCenter(timestampMs)
-    const ballCandidates = detections.filter((item) => item.className === 'ball')
+    const ballCandidates = detections.filter((item) => getDetectionRole(item) === 'ball')
     const ballDetection =
       inferenceFresh ? pickBallDetection(ballCandidates, predictedCenter) : null
 
@@ -270,7 +274,9 @@ export function createTracker() {
 
     if (displayHoopDetection && displayHoopBox) {
       outputDetections.push({
+        ...displayHoopDetection,
         className: 'hoop',
+        appClass: 'hoop',
         confidence: displayHoopDetection.confidence,
         box: displayHoopBox,
         fromAi: true,
@@ -278,7 +284,11 @@ export function createTracker() {
     }
 
     if (displayBallDetection && ballCenter) {
-      outputDetections.push(displayBallDetection)
+      outputDetections.push({
+        ...displayBallDetection,
+        className: 'ball',
+        appClass: 'ball',
+      })
     }
 
     if (shooterDetection) {

@@ -5,6 +5,7 @@ import {
   getSelectedClassConfThresholds,
 } from '../stores/aiModelSettings.js'
 import { createDetectorWorkerClient } from './workerClient.js'
+import { remapDetectionToCanvas } from './yoloUtils.js'
 
 export function createOnnxDetector() {
   const workerClient = createDetectorWorkerClient()
@@ -63,9 +64,12 @@ export function createOnnxDetector() {
         video,
         viewport,
       })
+      const canvasDetections = detections.map((detection) =>
+        remapDetectionToCanvas(detection, viewport),
+      )
 
       return {
-        detections,
+        detections: canvasDetections,
         viewport,
         orientation,
         inferenceFresh,

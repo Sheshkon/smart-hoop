@@ -98,16 +98,41 @@ export function createDetectorWorkerClient(options = {}) {
     worker.postMessage({ type: 'set-thresholds', classConfThresholds })
   }
 
+  function isSourceReady(source) {
+    if (source instanceof HTMLVideoElement) {
+      return source.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    }
+
+    if (source instanceof HTMLImageElement) {
+      return source.complete && source.naturalWidth > 0 && source.naturalHeight > 0
+    }
+
+    return Boolean(source?.width && source?.height)
+  }
+
+  function getSourceDimensions(source) {
+    if (source instanceof HTMLVideoElement) {
+      return { width: source.videoWidth, height: source.videoHeight }
+    }
+
+    if (source instanceof HTMLImageElement) {
+      return { width: source.naturalWidth, height: source.naturalHeight }
+    }
+
+    return { width: source.width ?? 0, height: source.height ?? 0 }
+  }
+
   /**
-   * @param {HTMLVideoElement} video
+   * @param {HTMLVideoElement | HTMLImageElement | HTMLCanvasElement} source
    * @param {number} canvasWidth
    * @param {number} canvasHeight
    * @param {object} viewport
    */
-  function scheduleDetection(video, canvasWidth, canvasHeight, viewport) {
+  function scheduleDetection(source, canvasWidth, canvasHeight, viewport) {
     inferInFlight = true
+    const { width: sourceWidth, height: sourceHeight } = getSourceDimensions(source)
 
-    createImageBitmap(video)
+    createImageBitmap(source)
       .then((bitmap) => {
         if (disposed || !worker) {
           bitmap.close()
@@ -121,8 +146,8 @@ export function createDetectorWorkerClient(options = {}) {
             bitmap,
             canvasWidth,
             canvasHeight,
-            sourceWidth: video.videoWidth,
-            sourceHeight: video.videoHeight,
+            sourceWidth,
+            sourceHeight,
             viewport,
           },
           [bitmap],
@@ -139,7 +164,7 @@ export function createDetectorWorkerClient(options = {}) {
    *   width: number,
    *   height: number,
    *   timestampMs?: number,
-   *   video?: HTMLVideoElement | null,
+   *   video?: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | null,
    *   viewport?: object,
    * }} input
    */
@@ -163,7 +188,7 @@ export function createDetectorWorkerClient(options = {}) {
     const shouldRun =
       !inferInFlight &&
       video != null &&
-      video.readyState >= 2 &&
+      isSourceReady(video) &&
       viewport != null &&
       timestampMs - lastInferenceAt >= inferenceIntervalMs
 

@@ -2,7 +2,6 @@ import * as ort from 'onnxruntime-web'
 import './ortSetup.js'
 import { DEFAULT_CLASS_CONF_THRESHOLDS, normalizeClassConfThresholds } from './detectorModels.js'
 import {
-  filterAppDetections,
   mapDetectionToCanvas,
   postprocessYoloOutput,
   preprocessFrame,
@@ -18,14 +17,24 @@ let inferInFlight = false
 let classConfThresholds = [...DEFAULT_CLASS_CONF_THRESHOLDS]
 
 async function createInferenceSession(modelUrl) {
-  const executionProviders =
-    typeof navigator !== 'undefined' && 'gpu' in navigator
-      ? ['webgpu', 'wasm']
-      : ['wasm']
+  const baseOptions = {
+    graphOptimizationLevel: 'all',
+  }
+
+  if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
+    try {
+      return await ort.InferenceSession.create(modelUrl, {
+        ...baseOptions,
+        executionProviders: ['webgpu'],
+      })
+    } catch (err) {
+      console.warn('WebGPU inference session failed, falling back to WASM:', err)
+    }
+  }
 
   return ort.InferenceSession.create(modelUrl, {
-    graphOptimizationLevel: 'all',
-    executionProviders,
+    ...baseOptions,
+    executionProviders: ['wasm'],
   })
 }
 
@@ -66,16 +75,14 @@ async function handleDetect(data) {
     const outputs = await session.run({ [inputName]: tensor })
     const output = outputs[outputName]
     const rawDetections = postprocessYoloOutput(output, { classConfThresholds })
-    const detections = filterAppDetections(
-      rawDetections.map((item) =>
-        mapDetectionToCanvas(
-          item,
-          preprocessMeta,
-          canvasWidth,
-          canvasHeight,
-          viewport,
-          inputSize,
-        ),
+    const detections = rawDetections.map((item) =>
+      mapDetectionToCanvas(
+        item,
+        preprocessMeta,
+        canvasWidth,
+        canvasHeight,
+        viewport,
+        inputSize,
       ),
     )
 
