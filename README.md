@@ -85,7 +85,9 @@ npm install
 
 | Файл | Назначение |
 |------|------------|
-| `public/models/smart-hoop-detector.onnx` | Детектор мяча, кольца, игрока (YOLOv8) |
+| `public/models/best_640.onnx` | Детектор: мяч, попадание, игрок, кольцо, бросок (YOLO) |
+| `public/models/best_480.onnx` | Более легкая версия детектора 480×480 |
+| `public/models/best_320.onnx` | Более легкая версия детектора 320×320 |
 | `public/models/mediapipe/pose_landmarker_lite.task` | Скелет игрока (MediaPipe, опционально) |
 
 3. (Опционально) Сгенерируйте иконки и splash screen:

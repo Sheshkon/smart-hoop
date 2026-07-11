@@ -17,6 +17,7 @@ import {
 
 const BALL_HISTORY_MAX = 120
 const BALL_HISTORY_INTERVAL_MS = 50
+const BALL_TRAJECTORY_TTL_MS = 1400
 const BALL_SIZE = 40
 
 const ballHistory = []
@@ -121,6 +122,13 @@ function pushBallHistory(point, timestampMs) {
   }
 }
 
+function pruneBallHistory(timestampMs) {
+  const minTimestamp = timestampMs - BALL_TRAJECTORY_TTL_MS
+  while (ballHistory.length > 0 && ballHistory[0].t < minTimestamp) {
+    ballHistory.shift()
+  }
+}
+
 /**
  * @param {{ width: number, height: number, timestampMs?: number, orientation?: string, paused?: boolean }} input
  */
@@ -129,6 +137,10 @@ export function runManualDetection(input) {
   const orientation = input.orientation || getOrientation(width, height)
   const calibration = getCalibration()
   const viewport = getSceneViewportForOrientation(width, height, orientation)
+
+  if (!paused) {
+    pruneBallHistory(timestampMs)
+  }
 
   const hoopBoxScene = getHoopBoxScene(orientation, calibration)
   const hoopBox = sceneBoxToCanvas(hoopBoxScene, viewport)
