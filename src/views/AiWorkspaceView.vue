@@ -35,12 +35,13 @@
         <HoopSceneCanvas
           ref="sceneRef"
           mode="session"
-          :paused="scenePaused"
+          :paused="false"
           :auto-detect-shots="sceneAutoDetect"
           :video="videoElement"
           detector-mode="ai"
           camera-overlay
           show-player-boxes
+          show-tracked-boxes
           @shot-detected="handleAutoShot"
         />
       </CameraView>
@@ -80,17 +81,10 @@ const pageTitle = computed(() => {
 const {
   status,
   isActive,
-  isPaused,
-  isIdle,
-  isEnded,
   canLeave,
   recordMake,
   recordMiss,
 } = useActiveSession()
-
-const scenePaused = computed(() => {
-  return isPaused.value || isIdle.value || isEnded.value
-})
 
 const sceneAutoDetect = computed(() => isSessionRoute.value && isActive.value)
 

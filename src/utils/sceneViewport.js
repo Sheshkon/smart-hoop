@@ -146,7 +146,7 @@ export function canvasBoxToScene(box, viewport) {
 }
 
 /**
- * Shot detection always runs in portrait scene space (calibration + trajectories).
+ * Shot detection always runs in portrait scene space.
  * @param {{ x: number, y: number } | null} ballCenter
  * @param {{ x: number, y: number, width: number, height: number }} hoopBox
  * @param {ReturnType<typeof getSceneViewport>} viewport

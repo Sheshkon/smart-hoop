@@ -5,13 +5,7 @@
     :class="{
       'detection-overlay--camera': cameraOverlay,
       'detection-overlay--landscape': orientation === 'landscape',
-      'detection-overlay--interactive': mode === 'calibration',
     }"
-    @pointerdown="onPointerDown"
-    @pointermove="onPointerMove"
-    @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
-    @pointerleave="onPointerUp"
   >
     <canvas ref="canvasRef" class="detection-overlay__canvas" />
     <FullscreenToggleButton
@@ -59,7 +53,6 @@ import {
 } from '../ai/poseTracking.js'
 import { createTracker } from '../ai/tracking.js'
 import { useFullscreenElement } from '../composables/useFullscreenElement.js'
-import { useHoopCalibrationEditor } from '../composables/useHoopCalibrationEditor.js'
 import { DETECTOR_MODES } from '../ai/detectorModes.js'
 import { getAiDetectorModel } from '../ai/detectorModels.js'
 import { aiModelSettings } from '../stores/aiModelSettings.js'
@@ -75,7 +68,7 @@ const props = defineProps({
   mode: {
     type: String,
     required: true,
-    validator: (value) => value === 'session' || value === 'calibration',
+    validator: (value) => value === 'session',
   },
   paused: {
     type: Boolean,
@@ -102,6 +95,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  showTrackedBoxes: {
+    type: Boolean,
+    default: false,
+  },
   detectionBoxMinConfidence: {
     type: Number,
     default: 0,
@@ -125,7 +122,6 @@ const canvasRef = ref(null)
 const cameraFullscreenRoot = inject('cameraFullscreenRoot', null)
 
 const { isFullscreen, isPseudoFullscreen, toggle: toggleFullscreen } = useFullscreenElement()
-const calibrationEditor = useHoopCalibrationEditor()
 
 const fullscreenTarget = computed(() => cameraFullscreenRoot?.value ?? containerRef.value)
 const activeDetectorMode = computed(() => props.detectorMode)
@@ -304,9 +300,6 @@ function syncCanvasSize() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
 
-  if (props.mode === 'calibration') {
-    drawCalibrationFrame()
-  }
 }
 
 function formatConfidencePercent(confidence) {
@@ -494,6 +487,17 @@ function drawSessionScene(ctx, result) {
 
   if (result.ballHistory?.length) {
     drawTrajectory(ctx, result.ballHistory)
+  }
+
+  if (props.showTrackedBoxes) {
+    drawDetectionBoxes(ctx, result.detections)
+
+    if (trackedPoses.length > 0) {
+      drawPoseSkeleton(ctx, trackedPoses, {
+        keypointMinConfidence: poseSettings.keypointConfidenceMin,
+      })
+    }
+    return
   }
 
   if (hoopDetection) {
@@ -721,17 +725,6 @@ function runPoseDetection(timestampMs, result = null) {
   }
 }
 
-function drawCalibrationFrame() {
-  const canvas = canvasRef.value
-  if (!canvas) return
-
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
-  calibrationEditor.drawCalibrationHoop(ctx, viewport, orientation.value)
-}
-
 function applyTracking(rawResult, timestampMs) {
   if (activeDetectorMode.value !== DETECTOR_MODES.AI) {
     hoopWarningText.value = ''
@@ -855,35 +848,6 @@ function runTestTrajectory(key) {
   return playTrajectory(key)
 }
 
-function onPointerDown(event) {
-  if (props.mode !== 'calibration') return
-
-  const changed = calibrationEditor.pointerDown(
-    event,
-    containerRef.value,
-    viewport,
-    orientation.value,
-  )
-  if (changed) drawCalibrationFrame()
-}
-
-function onPointerMove(event) {
-  if (props.mode !== 'calibration') return
-
-  const changed = calibrationEditor.pointerMove(
-    event,
-    containerRef.value,
-    viewport,
-    orientation.value,
-  )
-  if (changed) drawCalibrationFrame()
-}
-
-function onPointerUp(event) {
-  if (props.mode !== 'calibration') return
-  calibrationEditor.pointerUp(event, containerRef.value)
-}
-
 async function handleToggleFullscreen() {
   await toggleFullscreen(fullscreenTarget.value)
   await nextTick()
@@ -891,7 +855,6 @@ async function handleToggleFullscreen() {
 }
 
 function handleViewportChange() {
-  calibrationEditor.resetDrag()
   aiTracker.reset()
   poseTracker.players.clear()
   trackedPoses = []
@@ -902,8 +865,6 @@ function handleViewportChange() {
 }
 
 async function applyMode(mode) {
-  calibrationEditor.resetDrag()
-
   if (mode === 'session') {
     resetManualDetector()
     aiTracker.reset()
@@ -915,14 +876,7 @@ async function applyMode(mode) {
     await initDetector()
     await initPoseDetector()
     startSessionLoop()
-    return
   }
-
-  stopSessionLoop()
-  disposeDetector()
-  disposePoseDetector()
-  calibrationEditor.reloadFromStorage()
-  drawCalibrationFrame()
 }
 
 watch(isFullscreen, (value) => {
@@ -951,6 +905,15 @@ watch(
     poseTracker.players.clear()
     trackedPoses = []
     hoopWarningText.value = ''
+    shotMachine.reset()
+    shotState.value = SHOT_STATES.idle
+  },
+)
+
+watch(
+  () => props.autoDetectShots,
+  (enabled) => {
+    if (props.mode !== 'session' || !enabled) return
     shotMachine.reset()
     shotState.value = SHOT_STATES.idle
   },
@@ -1044,10 +1007,5 @@ defineExpose({
   playTestMissLeft: () => runTestTrajectory(TRAJECTORY_KEYS.missLeft),
   playTestMissRight: () => runTestTrajectory(TRAJECTORY_KEYS.missRight),
   playTestShortMiss: () => runTestTrajectory(TRAJECTORY_KEYS.shortMiss),
-  resetCalibration: () => {
-    calibrationEditor.resetBox()
-    drawCalibrationFrame()
-  },
-  confirmCalibration: () => calibrationEditor.confirmCalibration(),
 })
 </script>

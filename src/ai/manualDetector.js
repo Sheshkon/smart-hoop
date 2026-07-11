@@ -1,4 +1,3 @@
-import { DEFAULT_HOOP_BOX, getCalibration } from '../shot/hoopCalibration.js'
 import {
   getTrajectoryDurationMs,
   interpolateTrajectoryByTime,
@@ -19,6 +18,12 @@ const BALL_HISTORY_MAX = 120
 const BALL_HISTORY_INTERVAL_MS = 50
 const BALL_TRAJECTORY_TTL_MS = 1400
 const BALL_SIZE = 40
+const DEFAULT_HOOP_BOX = {
+  x: 140,
+  y: 100,
+  width: 120,
+  height: 80,
+}
 
 const ballHistory = []
 let lastHistoryTimestamp = 0
@@ -53,12 +58,11 @@ export function isTrajectoryPlaying(timestampMs = performance.now()) {
 }
 
 /**
- * Calibration is stored in portrait scene coords; map to active orientation.
+ * The manual detector uses a fixed portrait-scene hoop box for test trajectories.
  * @param {'portrait' | 'landscape'} orientation
- * @param {ReturnType<typeof getCalibration>} calibration
  */
-function getHoopBoxScene(orientation, calibration) {
-  const portraitBox = calibration.manuallyAdjusted ? calibration.hoopBox : DEFAULT_HOOP_BOX
+function getHoopBoxScene(orientation) {
+  const portraitBox = DEFAULT_HOOP_BOX
   if (orientation === 'landscape') {
     return portraitBoxToLandscape(portraitBox)
   }
@@ -99,8 +103,7 @@ function getBallCenterScene(timestampMs, paused, orientation) {
     return null
   }
 
-  const calibration = getCalibration()
-  const hoopBoxScene = getHoopBoxScene(orientation, calibration)
+  const hoopBoxScene = getHoopBoxScene(orientation)
   const trajectory = getTrajectoryForOrientation(activeTrajectoryKey, orientation, hoopBoxScene)
 
   return interpolateTrajectoryByTime(trajectory, elapsedMs)
@@ -135,21 +138,20 @@ function pruneBallHistory(timestampMs) {
 export function runManualDetection(input) {
   const { width, height, timestampMs = performance.now(), paused = false } = input
   const orientation = input.orientation || getOrientation(width, height)
-  const calibration = getCalibration()
   const viewport = getSceneViewportForOrientation(width, height, orientation)
 
   if (!paused) {
     pruneBallHistory(timestampMs)
   }
 
-  const hoopBoxScene = getHoopBoxScene(orientation, calibration)
+  const hoopBoxScene = getHoopBoxScene(orientation)
   const hoopBox = sceneBoxToCanvas(hoopBoxScene, viewport)
 
   const ballCenterScene = getBallCenterScene(timestampMs, paused, orientation)
   const detections = [
     {
       className: 'hoop',
-      confidence: calibration.manuallyAdjusted ? 1 : 0.95,
+      confidence: 0.95,
       box: hoopBox,
     },
   ]

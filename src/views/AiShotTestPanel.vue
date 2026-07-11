@@ -57,6 +57,7 @@
         :video="mediaElement"
         camera-overlay
         show-player-boxes
+        show-tracked-boxes
         @shot-detected="handleShotDetected"
         @detector-ready="handleDetectorReady"
         @detector-error="handleDetectorError"
