@@ -6,7 +6,7 @@ import {
   TRAJECTORIES,
   transformTrajectoryToHoop,
 } from '../shot/testTrajectories.js'
-import { boxFromCenter, getOrientation } from '../utils/geometry.js'
+import { boxFromCenter, getOrientation, getTopBoxBand } from '../utils/geometry.js'
 import {
   getSceneViewportForOrientation,
   portraitBoxToLandscape,
@@ -145,7 +145,8 @@ export function runManualDetection(input) {
   }
 
   const hoopBoxScene = getHoopBoxScene(orientation)
-  const hoopBox = sceneBoxToCanvas(hoopBoxScene, viewport)
+  const hoopSourceBox = sceneBoxToCanvas(hoopBoxScene, viewport)
+  const hoopBox = getTopBoxBand(hoopSourceBox)
 
   const ballCenterScene = getBallCenterScene(timestampMs, paused, orientation)
   const detections = [
@@ -180,6 +181,7 @@ export function runManualDetection(input) {
     ballCenter,
     ballHistory: ballHistory.map((point) => ({ ...point })),
     hoopBox,
+    hoopSourceBox,
     viewport,
     orientation,
     trajectoryPlaying: isTrajectoryPlaying(timestampMs),

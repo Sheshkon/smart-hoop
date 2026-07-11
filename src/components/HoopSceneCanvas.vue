@@ -13,8 +13,8 @@
       @toggle="handleToggleFullscreen"
     />
     <span class="detection-overlay__badge">{{ orientationLabel }}</span>
-    <span v-if="mode === 'session' && shotStateLabel" class="detection-overlay__state">
-      {{ shotStateLabel }}
+    <span v-if="mode === 'session' && shotStatusLabel" class="detection-overlay__state">
+      {{ shotStatusLabel }}
     </span>
     <div
       v-if="hoopWarningText"
@@ -60,9 +60,8 @@ import { poseSettings } from '../stores/poseSettings.js'
 import FullscreenToggleButton from './FullscreenToggleButton.vue'
 import { TRAJECTORY_KEYS } from '../shot/testTrajectories.js'
 import { createShotStateMachine, SHOT_STATES } from '../shot/shotStateMachine.js'
-import { drawHoopBox } from '../utils/hoopCanvasDrawing.js'
 import { getSceneViewportForOrientation, toPortraitShotSpace } from '../utils/sceneViewport.js'
-import { distance, getBoxCenter, getOrientation } from '../utils/geometry.js'
+import { distance, getBackboardZone, getBoxCenter, getOrientation } from '../utils/geometry.js'
 
 const props = defineProps({
   mode: {
@@ -169,6 +168,11 @@ const shotStateLabels = {
 }
 
 const shotStateLabel = computed(() => shotStateLabels[shotState.value] || '')
+const shotStatusLabel = computed(() => {
+  if (!props.autoDetectShots) return 'Автоучёт выкл.'
+  return shotStateLabel.value
+})
+const RIM_VISUAL_PADDING_FACTOR = 0.18
 
 const loadingModelLabel = computed(() => {
   if (activeDetectorMode.value !== DETECTOR_MODES.AI) return ''
@@ -326,8 +330,59 @@ function drawConfidenceLabel(ctx, text, x, y, color) {
   ctx.restore()
 }
 
-function drawHoop(ctx, hoopDetection) {
-  drawHoopBox(ctx, hoopDetection.box)
+function drawRimIntersectionZone(ctx, rimBox) {
+  const paddingX = rimBox.width * RIM_VISUAL_PADDING_FACTOR
+  const zoneX = rimBox.x - paddingX
+  const zoneWidth = rimBox.width + paddingX * 2
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(129, 199, 132, 0.18)'
+  ctx.strokeStyle = 'rgba(129, 199, 132, 0.85)'
+  ctx.lineWidth = 1.5
+  ctx.fillRect(zoneX, rimBox.y, zoneWidth, rimBox.height)
+  ctx.strokeRect(zoneX, rimBox.y, zoneWidth, rimBox.height)
+
+  const centerY = rimBox.y + rimBox.height / 2
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+  ctx.beginPath()
+  ctx.moveTo(zoneX, centerY)
+  ctx.lineTo(zoneX + zoneWidth, centerY)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawHoopSourceBox(ctx, sourceBox) {
+  if (!sourceBox) return
+
+  ctx.save()
+  ctx.strokeStyle = 'rgba(255, 140, 0, 0.6)'
+  ctx.lineWidth = 2
+  ctx.setLineDash([8, 5])
+  ctx.strokeRect(sourceBox.x, sourceBox.y, sourceBox.width, sourceBox.height)
+  ctx.fillStyle = 'rgba(255, 140, 0, 0.06)'
+  ctx.fillRect(sourceBox.x, sourceBox.y, sourceBox.width, sourceBox.height)
+  ctx.restore()
+}
+
+function drawBackboardZone(ctx, hoopBox) {
+  const zone = getBackboardZone(hoopBox)
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(66, 165, 245, 0.08)'
+  ctx.strokeStyle = 'rgba(66, 165, 245, 0.75)'
+  ctx.lineWidth = 1.5
+  ctx.setLineDash([7, 5])
+  ctx.strokeRect(zone.x, zone.y, zone.width, zone.height)
+  ctx.fillRect(zone.x, zone.y, zone.width, zone.height)
+  ctx.restore()
+}
+
+function drawHoop(ctx, hoopDetection, hoopSourceBox = null) {
+  drawBackboardZone(ctx, hoopDetection.box)
+  drawHoopSourceBox(ctx, hoopSourceBox)
+  drawRimIntersectionZone(ctx, hoopDetection.box)
   const label = formatConfidencePercent(hoopDetection.confidence)
   drawConfidenceLabel(ctx, label, hoopDetection.box.x, hoopDetection.box.y - 6, '#81c784')
 }
@@ -387,13 +442,14 @@ function drawBall(ctx, ballDetection, ballCenter) {
   drawConfidenceLabel(ctx, label, box.x, box.y - 6, isPredicted ? '#ff8a9b' : '#e94560')
 }
 
-function drawTrajectory(ctx, history) {
+function drawTrajectory(ctx, history, options = {}) {
   if (history.length < 2) return
 
-  ctx.strokeStyle = 'rgba(129, 199, 132, 0.75)'
-  ctx.lineWidth = 2
+  ctx.strokeStyle = options.color ?? 'rgba(129, 199, 132, 0.75)'
+  ctx.lineWidth = options.lineWidth ?? 2
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
+  if (options.dash) ctx.setLineDash(options.dash)
   ctx.beginPath()
   ctx.moveTo(history[0].x, history[0].y)
 
@@ -402,6 +458,7 @@ function drawTrajectory(ctx, history) {
   }
 
   ctx.stroke()
+  ctx.setLineDash([])
 }
 
 function drawDetectionBox(ctx, detection) {
@@ -485,12 +542,23 @@ function drawSessionScene(ctx, result) {
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
 
+  if (result.rawBallHistory?.length) {
+    drawTrajectory(ctx, result.rawBallHistory, {
+      color: 'rgba(255, 138, 155, 0.8)',
+      lineWidth: 2,
+      dash: [5, 4],
+    })
+  }
+
   if (result.ballHistory?.length) {
     drawTrajectory(ctx, result.ballHistory)
   }
 
   if (props.showTrackedBoxes) {
-    drawDetectionBoxes(ctx, result.detections)
+    if (hoopDetection) {
+      drawHoop(ctx, hoopDetection, result.hoopSourceBox)
+    }
+    drawDetectionBoxes(ctx, result.detections.filter((item) => item.className !== 'hoop'))
 
     if (trackedPoses.length > 0) {
       drawPoseSkeleton(ctx, trackedPoses, {
@@ -501,7 +569,7 @@ function drawSessionScene(ctx, result) {
   }
 
   if (hoopDetection) {
-    drawHoop(ctx, hoopDetection)
+    drawHoop(ctx, hoopDetection, result.hoopSourceBox)
   }
 
   if (props.showPlayerBoxes) {
@@ -739,21 +807,48 @@ function applyTracking(rawResult, timestampMs) {
   return tracked
 }
 
+function toPortraitBallHistory(history, result) {
+  if (!Array.isArray(history) || !result.hoopBox) return []
+
+  return history
+    .map((point) =>
+      toPortraitShotSpace(
+        point,
+        result.hoopBox,
+        result.viewport,
+        result.orientation,
+      ).ballCenter,
+    )
+    .filter(Boolean)
+}
+
 function processShotDetection(result, timestampMs) {
   if (!props.autoDetectShots || props.paused || !result.hoopBox) return
 
+  const shotBallCenter = result.rawBallCenter ?? result.ballCenter
+  const shotBallHistorySource =
+    result.rawBallHistory?.length ? result.rawBallHistory : result.ballHistory
+  const ballHistory = toPortraitBallHistory(shotBallHistorySource, result)
+  const ballDetection = result.detections.find((item) => item.className === 'ball')
+  const ballRadius = ballDetection?.box
+    ? (Math.min(ballDetection.box.width, ballDetection.box.height) / 2) / result.viewport.scale
+    : 0
   const { ballCenter, hoopBox } = toPortraitShotSpace(
-    result.ballCenter,
+    shotBallCenter,
     result.hoopBox,
     result.viewport,
     result.orientation,
   )
+  const backboardZone = getBackboardZone(hoopBox)
 
   const machineResult = shotMachine.update({
     ballCenter,
     hoopBox,
     timestampMs,
     ballVisible: Boolean(ballCenter),
+    ballRadius,
+    ballHistory,
+    backboardZone,
   })
 
   shotState.value = machineResult.state
@@ -791,8 +886,11 @@ function renderSessionFrame(timestampMs) {
       detections: rawResult.detections,
       rawDetections: rawResult.detections,
       ballCenter: trackedResult.ballCenter,
+      rawBallCenter: trackedResult.rawBallCenter,
       hoopBox: trackedResult.hoopBox,
+      hoopSourceBox: trackedResult.hoopSourceBox,
       ballHistory: trackedResult.ballHistory,
+      rawBallHistory: trackedResult.rawBallHistory,
       poses: trackedPoses,
       timestampMs,
     })
@@ -813,7 +911,9 @@ function renderSessionFrame(timestampMs) {
       detections: result.detections,
       rawDetections: rawResult.detections,
       ballCenter: result.ballCenter,
+      rawBallCenter: result.rawBallCenter,
       hoopBox: result.hoopBox,
+      hoopSourceBox: result.hoopSourceBox,
       timestampMs,
     })
   }

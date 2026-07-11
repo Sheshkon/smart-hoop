@@ -1,4 +1,4 @@
-import { boxFromCenter, distance, getBoxCenter } from '../utils/geometry.js'
+import { boxFromCenter, distance, getBoxCenter, getTopBoxBand } from '../utils/geometry.js'
 import { boxIoU } from './yoloUtils.js'
 
 const BALL_CONFIDENCE_MIN = 0.15
@@ -22,6 +22,13 @@ const VELOCITY_SAMPLE_COUNT = 5
 const BALL_SMOOTHING_ALPHA_DETECTED = 0.48
 const BALL_SMOOTHING_ALPHA_TRACKED = 0.38
 const BALL_SMOOTHING_ALPHA_PREDICTED = 0.78
+const BALL_KALMAN_PROCESS_NOISE = 12000
+const BALL_KALMAN_MEASUREMENT_NOISE = 12
+const BALL_KALMAN_INITIAL_VELOCITY_VARIANCE = 260000
+const HOOP_RIM_HEIGHT_FACTOR = 0.28
+const HOOP_RIM_MIN_HEIGHT_PX = 8
+const HOOP_RIM_MAX_HEIGHT_PX = 30
+const HOOP_SMOOTHING_HISTORY_MAX = 7
 
 const HOOP_LOST_WARNING = 'Кольцо не видно'
 
@@ -68,6 +75,195 @@ function smoothPoint(previous, current, alpha) {
     x: previous.x + (current.x - previous.x) * alpha,
     y: previous.y + (current.y - previous.y) * alpha,
   }
+}
+
+function getMedian(values) {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  if (sorted.length % 2 === 1) return sorted[middle]
+  return (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+function getMedianBox(boxes) {
+  return {
+    x: getMedian(boxes.map((box) => box.x)),
+    y: getMedian(boxes.map((box) => box.y)),
+    width: getMedian(boxes.map((box) => box.width)),
+    height: getMedian(boxes.map((box) => box.height)),
+  }
+}
+
+function pushHoopSourceBox(history, box) {
+  history.push({ ...box })
+  if (history.length > HOOP_SMOOTHING_HISTORY_MAX) {
+    history.shift()
+  }
+
+  return getMedianBox(history)
+}
+
+function createBallKalmanFilter() {
+  let initialized = false
+  let lastTimestampMs = 0
+  let state = [0, 0, 0, 0]
+  let covariance = createIdentityMatrix(4, 1)
+
+  function reset() {
+    initialized = false
+    lastTimestampMs = 0
+    state = [0, 0, 0, 0]
+    covariance = createIdentityMatrix(4, 1)
+  }
+
+  function init(center, timestampMs) {
+    initialized = true
+    lastTimestampMs = timestampMs
+    state = [center.x, center.y, 0, 0]
+    covariance = [
+      [80, 0, 0, 0],
+      [0, 80, 0, 0],
+      [0, 0, BALL_KALMAN_INITIAL_VELOCITY_VARIANCE, 0],
+      [0, 0, 0, BALL_KALMAN_INITIAL_VELOCITY_VARIANCE],
+    ]
+  }
+
+  function predict(timestampMs) {
+    if (!initialized) return null
+
+    const dt = Math.max(0.001, Math.min(0.25, (timestampMs - lastTimestampMs) / 1000))
+    lastTimestampMs = timestampMs
+
+    const transition = [
+      [1, 0, dt, 0],
+      [0, 1, 0, dt],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1],
+    ]
+    const processNoise = createProcessNoise(dt)
+
+    state = multiplyMatrixVector(transition, state)
+    covariance = addMatrices(
+      multiplyMatrices(multiplyMatrices(transition, covariance), transposeMatrix(transition)),
+      processNoise,
+    )
+
+    return getCenter()
+  }
+
+  function correct(center, timestampMs, confidence = 1) {
+    if (!initialized) {
+      init(center, timestampMs)
+      return getCenter()
+    }
+
+    if (timestampMs > lastTimestampMs) {
+      predict(timestampMs)
+    }
+
+    const measurement = [center.x, center.y]
+    const measurementMatrix = [
+      [1, 0, 0, 0],
+      [0, 1, 0, 0],
+    ]
+    const confidenceScale = Math.max(0.35, Math.min(1.6, 1 / Math.max(0.08, confidence)))
+    const measurementNoise = createIdentityMatrix(
+      2,
+      BALL_KALMAN_MEASUREMENT_NOISE * confidenceScale,
+    )
+    const innovation = subtractVectors(measurement, multiplyMatrixVector(measurementMatrix, state))
+    const innovationCovariance = addMatrices(
+      multiplyMatrices(multiplyMatrices(measurementMatrix, covariance), transposeMatrix(measurementMatrix)),
+      measurementNoise,
+    )
+    const kalmanGain = multiplyMatrices(
+      multiplyMatrices(covariance, transposeMatrix(measurementMatrix)),
+      invert2x2(innovationCovariance),
+    )
+    state = addVectors(state, multiplyMatrixVector(kalmanGain, innovation))
+    covariance = multiplyMatrices(
+      subtractMatrices(createIdentityMatrix(4, 1), multiplyMatrices(kalmanGain, measurementMatrix)),
+      covariance,
+    )
+
+    return getCenter()
+  }
+
+  function getCenter() {
+    if (!initialized) return null
+    return { x: state[0], y: state[1] }
+  }
+
+  function getVelocity() {
+    if (!initialized) return null
+    return { vx: state[2], vy: state[3] }
+  }
+
+  return { correct, getCenter, getVelocity, predict, reset }
+}
+
+function createProcessNoise(dt) {
+  const dt2 = dt * dt
+  const dt3 = dt2 * dt
+  const dt4 = dt2 * dt2
+  const q = BALL_KALMAN_PROCESS_NOISE
+
+  return [
+    [(dt4 / 4) * q, 0, (dt3 / 2) * q, 0],
+    [0, (dt4 / 4) * q, 0, (dt3 / 2) * q],
+    [(dt3 / 2) * q, 0, dt2 * q, 0],
+    [0, (dt3 / 2) * q, 0, dt2 * q],
+  ]
+}
+
+function createIdentityMatrix(size, value) {
+  return Array.from({ length: size }, (_, row) =>
+    Array.from({ length: size }, (_, column) => (row === column ? value : 0)),
+  )
+}
+
+function transposeMatrix(matrix) {
+  return matrix[0].map((_, column) => matrix.map((row) => row[column]))
+}
+
+function multiplyMatrices(a, b) {
+  return a.map((row) =>
+    b[0].map((_, column) => row.reduce((sum, value, index) => sum + value * b[index][column], 0)),
+  )
+}
+
+function multiplyMatrixVector(matrix, vector) {
+  return matrix.map((row) => row.reduce((sum, value, index) => sum + value * vector[index], 0))
+}
+
+function addMatrices(a, b) {
+  return a.map((row, rowIndex) => row.map((value, columnIndex) => value + b[rowIndex][columnIndex]))
+}
+
+function subtractMatrices(a, b) {
+  return a.map((row, rowIndex) => row.map((value, columnIndex) => value - b[rowIndex][columnIndex]))
+}
+
+function addVectors(a, b) {
+  return a.map((value, index) => value + b[index])
+}
+
+function subtractVectors(a, b) {
+  return a.map((value, index) => value - b[index])
+}
+
+function invert2x2(matrix) {
+  const [[a, b], [c, d]] = matrix
+  const determinant = a * d - b * c
+  if (Math.abs(determinant) < 1e-9) {
+    return createIdentityMatrix(2, 1)
+  }
+
+  const invDeterminant = 1 / determinant
+  return [
+    [d * invDeterminant, -b * invDeterminant],
+    [-c * invDeterminant, a * invDeterminant],
+  ]
 }
 
 function getAllowedJumpDistance(deltaMs) {
@@ -223,7 +419,10 @@ function pickShooter(persons, ballCenter, hoopBox) {
 
 export function createTracker() {
   const ballHistory = []
+  const rawBallHistory = []
+  const hoopSourceHistory = []
   const lastHistoryTimestamp = { value: 0 }
+  const lastRawHistoryTimestamp = { value: 0 }
   let hoopLostFrames = 0
   let lastBallCenter = null
   let lastDetectedBallCenter = null
@@ -232,12 +431,17 @@ export function createTracker() {
   let lastBallBox = null
   let lastBallVelocity = null
   let lastHoopBox = null
+  let lastHoopSourceBox = null
   let lastHoopDetection = null
   let hasSeenHoop = false
+  const ballKalman = createBallKalmanFilter()
 
   function reset() {
     ballHistory.length = 0
+    rawBallHistory.length = 0
+    hoopSourceHistory.length = 0
     lastHistoryTimestamp.value = 0
+    lastRawHistoryTimestamp.value = 0
     hoopLostFrames = 0
     lastBallCenter = null
     lastDetectedBallCenter = null
@@ -246,20 +450,19 @@ export function createTracker() {
     lastBallBox = null
     lastBallVelocity = null
     lastHoopBox = null
+    lastHoopSourceBox = null
     lastHoopDetection = null
     hasSeenHoop = false
+    ballKalman.reset()
   }
 
   function predictBallCenter(timestampMs) {
-    if (!lastDetectedBallCenter || !lastBallVelocity || lastBallDetectedAt <= 0) return null
+    if (!lastDetectedBallCenter || lastBallDetectedAt <= 0) return null
 
     const dt = timestampMs - lastBallDetectedAt
     if (dt <= 0 || dt > BALL_COAST_MAX_MS) return null
 
-    return {
-      x: lastDetectedBallCenter.x + (lastBallVelocity.vx * dt) / 1000,
-      y: lastDetectedBallCenter.y + (lastBallVelocity.vy * dt) / 1000,
-    }
+    return ballKalman.predict(timestampMs)
   }
 
   /**
@@ -279,14 +482,20 @@ export function createTracker() {
 
     if (!paused) {
       pruneBallHistory(ballHistory, timestampMs)
+      pruneBallHistory(rawBallHistory, timestampMs)
     }
 
     const hoopCandidates = detections.filter((item) => getDetectionRole(item) === 'hoop')
-    const hoopDetection = pickHoopDetection(hoopCandidates, lastHoopBox)
+    const hoopDetection = pickHoopDetection(hoopCandidates, lastHoopSourceBox)
     let hoopWarning = null
 
     if (!paused && hoopDetection) {
-      lastHoopBox = { ...hoopDetection.box }
+      lastHoopSourceBox = pushHoopSourceBox(hoopSourceHistory, hoopDetection.box)
+      lastHoopBox = getTopBoxBand(lastHoopSourceBox, {
+        factor: HOOP_RIM_HEIGHT_FACTOR,
+        minHeight: HOOP_RIM_MIN_HEIGHT_PX,
+        maxHeight: HOOP_RIM_MAX_HEIGHT_PX,
+      })
       lastHoopDetection = hoopDetection
       hoopLostFrames = 0
       hasSeenHoop = true
@@ -296,6 +505,8 @@ export function createTracker() {
       if (hoopLostFrames >= HOOP_LOST_FRAME_THRESHOLD) {
         hoopWarning = HOOP_LOST_WARNING
         lastHoopBox = null
+        lastHoopSourceBox = null
+        hoopSourceHistory.length = 0
         lastHoopDetection = null
         hasSeenHoop = false
       }
@@ -322,16 +533,18 @@ export function createTracker() {
       : null
 
     let ballCenter = null
+    let rawBallCenter = null
     let ballTrackState = 'lost'
     let displayBallDetection = null
 
     if (ballDetection) {
       const detectedCenter = getBoxCenter(ballDetection.box)
-      const smoothingAlpha =
+      rawBallCenter = detectedCenter
+      const measuredCenter =
         ballDetection.confidence < BALL_CONFIDENCE_MIN
-          ? BALL_SMOOTHING_ALPHA_TRACKED
-          : BALL_SMOOTHING_ALPHA_DETECTED
-      ballCenter = smoothPoint(lastBallCenter, detectedCenter, smoothingAlpha)
+          ? smoothPoint(lastBallCenter, detectedCenter, BALL_SMOOTHING_ALPHA_TRACKED)
+          : detectedCenter
+      ballCenter = ballKalman.correct(measuredCenter, timestampMs, ballDetection.confidence)
       lastBallCenter = { ...ballCenter }
       lastDetectedBallCenter = { ...ballCenter }
       lastBallDetectedAt = timestampMs
@@ -345,6 +558,7 @@ export function createTracker() {
 
       if (!paused) {
         pushBallHistory(ballHistory, lastHistoryTimestamp, ballCenter, timestampMs)
+        pushBallHistory(rawBallHistory, lastRawHistoryTimestamp, rawBallCenter, timestampMs)
       }
     } else if (predictedCenter && lastBallBox) {
       ballCenter = smoothPoint(lastBallCenter, predictedCenter, BALL_SMOOTHING_ALPHA_PREDICTED)
@@ -369,14 +583,15 @@ export function createTracker() {
       lastBallUpdatedAt = 0
       lastBallBox = null
       lastBallVelocity = null
+      ballKalman.reset()
       ballHistory.length = 0
+      rawBallHistory.length = 0
       lastHistoryTimestamp.value = 0
+      lastRawHistoryTimestamp.value = 0
     }
 
-    const ballVelocity = computeVelocity(ballHistory)
-    if (ballVelocity) {
-      lastBallVelocity = ballVelocity
-    }
+    const ballVelocity = ballKalman.getVelocity() ?? computeVelocity(ballHistory)
+    lastBallVelocity = ballVelocity ?? null
 
     const personCandidates = detections
       .filter(
@@ -420,11 +635,14 @@ export function createTracker() {
     return {
       detections: outputDetections,
       ballCenter,
+      rawBallCenter,
       ballHistory: ballHistory.map((point) => ({ ...point })),
+      rawBallHistory: rawBallHistory.map((point) => ({ ...point })),
       ballVelocity,
       ballTrackState,
       shooterDetection,
       hoopBox: displayHoopBox,
+      hoopSourceBox: lastHoopSourceBox ? { ...lastHoopSourceBox } : null,
       viewport,
       orientation,
       hoopLost: hoopWarning != null,

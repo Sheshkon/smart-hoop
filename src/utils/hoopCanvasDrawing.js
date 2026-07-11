@@ -44,7 +44,7 @@ export function drawDetectionBackground(ctx, viewport) {
 export function drawHoopBox(ctx, box, options = {}) {
   const { showHandles = false, handleSize = 10 } = options
   const center = getBoxCenter(box)
-  const rimRadius = Math.min(box.width, box.height) * 0.42
+  const rimRadius = box.width / 2
 
   ctx.strokeStyle = 'rgba(255, 140, 0, 0.9)'
   ctx.lineWidth = 3

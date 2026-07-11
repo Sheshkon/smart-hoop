@@ -1,4 +1,7 @@
 import {
+  didBallCrossRimZone,
+  didSegmentTouchBox,
+  getRimLineCrossing,
   hasPassedHoopLevel,
   isApproachingHoop,
   isBallAboveHoop,
@@ -22,6 +25,7 @@ export const SHOT_STATES = {
 const COOLDOWN_MS = 1500
 const ATTEMPT_WINDOW_MS = 2500
 const MIN_MOVEMENT_PX = 8
+const RIM_CROSSING_HISTORY_POINTS = 10
 
 /**
  * @param {{ cooldownMs?: number, attemptWindowMs?: number }} [options]
@@ -35,6 +39,8 @@ export function createShotStateMachine(options = {}) {
   let attemptStartedAt = null
   let wasAboveHoop = false
   let enteredRimZone = false
+  let touchedBackboardZone = false
+  let rimLineNearMissCandidate = false
   let wasInApproachRange = false
   let attemptApexY = null
   let lastBallCenter = null
@@ -46,6 +52,8 @@ export function createShotStateMachine(options = {}) {
     attemptStartedAt = null
     wasAboveHoop = false
     enteredRimZone = false
+    touchedBackboardZone = false
+    rimLineNearMissCandidate = false
     wasInApproachRange = false
     attemptApexY = null
     lastBallCenter = null
@@ -56,17 +64,59 @@ export function createShotStateMachine(options = {}) {
     return state
   }
 
+  function finishAttempt(event, timestampMs) {
+    state = event === 'make' ? SHOT_STATES.made : SHOT_STATES.missed
+    cooldownUntil = timestampMs + cooldownMs
+    state = SHOT_STATES.cooldown
+    wasAboveHoop = false
+    enteredRimZone = false
+    touchedBackboardZone = false
+    rimLineNearMissCandidate = false
+    wasInApproachRange = false
+    attemptApexY = null
+    attemptStartedAt = null
+    trajectoryStartCenter = null
+    return { state, event }
+  }
+
+  function getLatestDownwardRimCrossing(history, hoopBox, ballRadius) {
+    if (!Array.isArray(history) || history.length < 2) return null
+
+    const recent = history.slice(-RIM_CROSSING_HISTORY_POINTS)
+    let latestNearCrossing = null
+
+    for (let index = recent.length - 1; index > 0; index -= 1) {
+      const crossing = getRimLineCrossing(
+        recent[index - 1],
+        recent[index],
+        hoopBox,
+        ballRadius,
+      )
+      if (crossing?.direction !== 'down') continue
+      if (crossing.withinWidth) return crossing
+      if (!latestNearCrossing && crossing.nearHoop) {
+        latestNearCrossing = crossing
+      }
+    }
+
+    return latestNearCrossing
+  }
+
   /**
    * @param {{
    *   ballCenter: { x: number, y: number } | null,
    *   hoopBox: { x: number, y: number, width: number, height: number },
    *   timestampMs: number,
    *   ballVisible?: boolean,
+   *   ballRadius?: number,
+   *   ballHistory?: Array<{ x: number, y: number }>,
+   *   backboardZone?: { x: number, y: number, width: number, height: number },
    * }} input
    * @returns {{ state: string, event: 'make' | 'miss' | null }}
    */
   function update(input) {
     const { ballCenter, hoopBox, timestampMs } = input
+    const ballRadius = Math.max(0, Number(input.ballRadius) || 0)
     const ballVisible = input.ballVisible !== false && ballCenter != null
 
     if (state === SHOT_STATES.cooldown) {
@@ -124,7 +174,30 @@ export function createShotStateMachine(options = {}) {
       attemptApexY = attemptApexY == null ? ballCenter.y : Math.min(attemptApexY, ballCenter.y)
     }
 
-    if (isBallInRimZone(ballCenter, hoopBox)) {
+    const crossedRimZone = didBallCrossRimZone(prevCenter, ballCenter, hoopBox)
+    if (didSegmentTouchBox(prevCenter, ballCenter, input.backboardZone)) {
+      touchedBackboardZone = true
+    }
+    const rimLineCrossing =
+      getLatestDownwardRimCrossing(input.ballHistory, hoopBox, ballRadius) ??
+      getRimLineCrossing(prevCenter, ballCenter, hoopBox, ballRadius)
+    const hasAttemptSignal =
+      wasAboveHoop &&
+      movedEnough &&
+      (state !== SHOT_STATES.idle || isApproachingHoop(ballCenter, hoopBox))
+
+    if (hasAttemptSignal && rimLineCrossing?.direction === 'down') {
+      if (rimLineCrossing.withinWidth) {
+        enteredRimZone = true
+        return finishAttempt('make', timestampMs)
+      }
+
+      if (rimLineCrossing.nearHoop) {
+        rimLineNearMissCandidate = true
+      }
+    }
+
+    if (crossedRimZone || isBallInRimZone(ballCenter, hoopBox)) {
       enteredRimZone = true
       if (
         state === SHOT_STATES.ballDetected ||
@@ -145,16 +218,7 @@ export function createShotStateMachine(options = {}) {
       isBallWithinHoopWidth(ballCenter, hoopBox)
 
     if (makeDetected) {
-      state = SHOT_STATES.made
-      cooldownUntil = timestampMs + cooldownMs
-      state = SHOT_STATES.cooldown
-      wasAboveHoop = false
-      enteredRimZone = false
-      wasInApproachRange = false
-      attemptApexY = null
-      attemptStartedAt = null
-      trajectoryStartCenter = null
-      return { state, event: 'make' }
+      return finishAttempt('make', timestampMs)
     }
 
     const inAttempt =
@@ -180,23 +244,34 @@ export function createShotStateMachine(options = {}) {
       !enteredRimZone &&
       isBallBelowHoop(ballCenter, hoopBox) &&
       isWideMiss(ballCenter, hoopBox)
+    const missByBackboard =
+      inAttempt &&
+      touchedBackboardZone &&
+      !enteredRimZone &&
+      isMovingDown(prevCenter, ballCenter) &&
+      isBallBelowHoop(ballCenter, hoopBox)
+    const missByRimLineNearCrossing =
+      inAttempt &&
+      rimLineNearMissCandidate &&
+      !enteredRimZone &&
+      isBallBelowHoop(ballCenter, hoopBox)
 
-    if (missByWidePath || missByShortFall || missByTimeout || missByDropWithoutRim) {
-      state = SHOT_STATES.missed
-      cooldownUntil = timestampMs + cooldownMs
-      state = SHOT_STATES.cooldown
-      wasAboveHoop = false
-      enteredRimZone = false
-      wasInApproachRange = false
-      attemptApexY = null
-      attemptStartedAt = null
-      trajectoryStartCenter = null
-      return { state, event: 'miss' }
+    if (
+      missByWidePath ||
+      missByShortFall ||
+      missByTimeout ||
+      missByDropWithoutRim ||
+      missByBackboard ||
+      missByRimLineNearCrossing
+    ) {
+      return finishAttempt('miss', timestampMs)
     }
 
     if (attemptExpired && !enteredRimZone) {
       state = SHOT_STATES.idle
       wasAboveHoop = false
+      touchedBackboardZone = false
+      rimLineNearMissCandidate = false
       wasInApproachRange = false
       attemptApexY = null
       attemptStartedAt = null

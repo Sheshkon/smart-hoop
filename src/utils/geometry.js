@@ -19,6 +19,34 @@ export function boxFromCenter(center, size) {
   }
 }
 
+export function getTopBoxBand(box, options = {}) {
+  const factor = options.factor ?? 0.28
+  const minHeight = options.minHeight ?? 8
+  const maxHeight = options.maxHeight ?? 30
+  const height = Math.min(maxHeight, Math.max(minHeight, box.height * factor))
+
+  return {
+    ...box,
+    height: Math.min(box.height, height),
+  }
+}
+
+export function getBackboardZone(hoopBox, options = {}) {
+  const widthFactor = options.widthFactor ?? 2.4
+  const heightFactor = options.heightFactor ?? 1.5
+  const topOffsetFactor = options.topOffsetFactor ?? 1.2
+  const centerX = hoopBox.x + hoopBox.width / 2
+  const width = hoopBox.width * widthFactor
+  const height = hoopBox.width * heightFactor
+
+  return {
+    x: centerX - width / 2,
+    y: hoopBox.y - hoopBox.width * topOffsetFactor,
+    width,
+    height,
+  }
+}
+
 export function scaleBox(box, fromWidth, fromHeight, toWidth, toHeight) {
   const scaleX = toWidth / fromWidth
   const scaleY = toHeight / fromHeight
