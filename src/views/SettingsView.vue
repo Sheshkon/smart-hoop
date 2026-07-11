@@ -7,6 +7,25 @@
 
     <main class="page-content">
       <section class="settings-section">
+        <h2 class="settings-section__title">Тема оформления</h2>
+        <div class="theme-picker" role="radiogroup" aria-label="Тема оформления">
+          <button
+            v-for="option in themeOptions"
+            :key="option.value"
+            type="button"
+            class="theme-picker__option"
+            :class="{ 'theme-picker__option--active': themeSettings.preference === option.value }"
+            role="radio"
+            :aria-checked="themeSettings.preference === option.value"
+            @click="setThemePreference(option.value)"
+          >
+            <span class="theme-picker__swatch" :class="`theme-picker__swatch--${option.value}`" aria-hidden="true" />
+            {{ option.label }}
+          </button>
+        </div>
+      </section>
+
+      <section class="settings-section">
         <h2 class="settings-section__title">AI-модель детектора</h2>
         <p class="settings-section__hint">
           Используется в AI-сессии. При смене модели детектор перезагрузится автоматически.
@@ -55,9 +74,6 @@
           >
         </label>
 
-        <button type="button" class="btn btn-secondary btn-small" @click="resetClassConfThresholds">
-          Сбросить пороги
-        </button>
       </section>
 
       <section class="settings-section">
@@ -118,23 +134,10 @@
         </label>
       </section>
 
-      <section class="settings-section">
-        <h2 class="settings-section__title">Тема оформления</h2>
-        <div class="theme-picker" role="radiogroup" aria-label="Тема оформления">
-          <button
-            v-for="option in themeOptions"
-            :key="option.value"
-            type="button"
-            class="theme-picker__option"
-            :class="{ 'theme-picker__option--active': themeSettings.preference === option.value }"
-            role="radio"
-            :aria-checked="themeSettings.preference === option.value"
-            @click="setThemePreference(option.value)"
-          >
-            <span class="theme-picker__swatch" :class="`theme-picker__swatch--${option.value}`" aria-hidden="true" />
-            {{ option.label }}
-          </button>
-        </div>
+      <section class="settings-section settings-section--reset">
+        <button type="button" class="btn btn-secondary btn-large" @click="resetDetectorSettings">
+          Сбросить настройки детекторов
+        </button>
       </section>
     </main>
   </div>
@@ -152,7 +155,7 @@ import {
 import { POSE_MODES } from '../ai/poseDetectorFactory.js'
 import {
   aiModelSettings,
-  resetClassConfThresholds,
+  resetAiDetectorSettings,
   setAiDetectorModel,
   setClassConfThreshold,
 } from '../stores/aiModelSettings.js'
@@ -167,6 +170,7 @@ import {
   setPoseFps,
   setPoseKeypointConfidenceMin,
   setPoseMode,
+  resetPoseSettings,
 } from '../stores/poseSettings.js'
 import { themeSettings, setThemePreference, THEME_OPTIONS } from '../stores/theme.js'
 
@@ -176,6 +180,11 @@ const poseModelFileName = computed(() => getPoseModelFileName())
 
 function formatThreshold(value) {
   return `${Math.round(value * 100)}%`
+}
+
+function resetDetectorSettings() {
+  resetAiDetectorSettings()
+  resetPoseSettings()
 }
 
 const poseModeOptions = [

@@ -107,6 +107,12 @@ export function resetClassConfThresholds() {
   saveSettings()
 }
 
+export function resetAiDetectorSettings() {
+  aiModelSettings.modelId = DEFAULT_AI_MODEL_ID
+  aiModelSettings.classConfThresholds = [...DEFAULT_CLASS_CONF_THRESHOLDS]
+  saveSettings()
+}
+
 export function getSelectedAiDetectorModel() {
   return getAiDetectorModel(aiModelSettings.modelId)
 }

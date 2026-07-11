@@ -138,6 +138,14 @@ export function setPoseModel(modelUrl) {
   saveSettings()
 }
 
+export function resetPoseSettings() {
+  poseSettings.poseMode = POSE_MODES.MEDIAPIPE
+  poseSettings.poseFps = POSE_FPS_DEFAULT
+  poseSettings.poseModel = POSE_MODEL_RELATIVE
+  poseSettings.keypointConfidenceMin = POSE_KEYPOINT_CONFIDENCE_DEFAULT
+  saveSettings()
+}
+
 export function getPoseModelFileName() {
   const parts = poseSettings.poseModel.split('/')
   return parts[parts.length - 1] || poseSettings.poseModel

@@ -127,18 +127,94 @@
         </p>
 
         <template v-else>
-          <p class="stats-summary">
-            Показано {{ rangeStart }}–{{ rangeEnd }} из {{ filteredSessions.length }}
-            <span v-if="hasActiveFilters">(всего {{ sessionHistory.sessions.length }})</span>
-          </p>
-
-          <ul class="stats-list">
-            <li
-              v-for="s in paginatedSessions"
-              :key="s.id"
-              class="stats-card"
-              :class="{ 'stats-card--editing': editingId === s.id }"
+          <div class="stats-tabs" role="tablist" aria-label="Разделы статистики">
+            <button
+              type="button"
+              class="stats-tabs__button"
+              :class="{ 'stats-tabs__button--active': activeStatsTab === 'sessions' }"
+              role="tab"
+              :aria-selected="activeStatsTab === 'sessions'"
+              aria-controls="stats-sessions-panel"
+              @click="activeStatsTab = 'sessions'"
             >
+              История тренировок
+            </button>
+            <button
+              type="button"
+              class="stats-tabs__button"
+              :class="{ 'stats-tabs__button--active': activeStatsTab === 'players' }"
+              role="tab"
+              :aria-selected="activeStatsTab === 'players'"
+              aria-controls="stats-players-panel"
+              @click="activeStatsTab = 'players'"
+            >
+              Сводка по игрокам
+            </button>
+          </div>
+
+          <section
+            v-if="activeStatsTab === 'players'"
+            id="stats-players-panel"
+            class="player-stats"
+            role="tabpanel"
+            aria-labelledby="player-stats-title"
+          >
+            <div class="player-stats__header">
+              <h2 id="player-stats-title" class="player-stats__title">Статистика по игрокам</h2>
+              <span class="player-stats__meta">
+                Игроков: {{ playerStatsRows.length }} · Сессий: {{ filteredSessions.length }}
+              </span>
+            </div>
+
+            <div class="player-stats__table-wrap">
+              <table class="player-stats__table">
+                <tbody>
+                  <template v-for="row in playerStatsRows" :key="row.key">
+                    <tr class="player-stats__player-row">
+                      <th colspan="2" scope="rowgroup">
+                        <span class="player-stats__name">{{ row.name }}</span>
+                      </th>
+                    </tr>
+                    <tr
+                      v-for="stat in getPlayerStatItems(row)"
+                      :key="`${row.key}-${stat.key}`"
+                      class="player-stats__stat-row"
+                    >
+                      <td class="player-stats__stat-label">{{ stat.label }}</td>
+                      <td
+                        class="player-stats__stat-value"
+                        :class="{
+                          'player-stats__make': stat.tone === 'make',
+                          'player-stats__miss': stat.tone === 'miss',
+                        }"
+                      >
+                        {{ stat.value }}
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section
+            v-else
+            id="stats-sessions-panel"
+            role="tabpanel"
+            aria-label="История тренировок"
+          >
+            <p class="stats-summary">
+              Показано {{ rangeStart }}–{{ rangeEnd }} из {{ filteredSessions.length }}
+              <span v-if="hasActiveFilters">(всего {{ sessionHistory.sessions.length }})</span>
+            </p>
+
+            <ul class="stats-list">
+              <li
+                v-for="s in paginatedSessions"
+                :key="s.id"
+                class="stats-card"
+                :class="{ 'stats-card--editing': editingId === s.id }"
+              >
               <div v-if="editingId === s.id" class="stats-card__edit">
                 <div class="stats-card__edit-header">
                   <span class="stats-card__date">{{ formatDate(s.startedAt) }}</span>
@@ -378,30 +454,31 @@
                   </div>
                 </div>
               </template>
-            </li>
-          </ul>
+              </li>
+            </ul>
 
-          <nav v-if="totalPages > 1" class="stats-pagination" aria-label="Навигация по страницам">
-            <button
-              type="button"
-              class="btn btn-secondary btn-small"
-              :disabled="currentPage <= 1"
-              @click="currentPage--"
-            >
-              ← Назад
-            </button>
-            <span class="stats-pagination__info">
-              {{ currentPage }} / {{ totalPages }}
-            </span>
-            <button
-              type="button"
-              class="btn btn-secondary btn-small"
-              :disabled="currentPage >= totalPages"
-              @click="currentPage++"
-            >
-              Вперёд →
-            </button>
-          </nav>
+            <nav v-if="totalPages > 1" class="stats-pagination" aria-label="Навигация по страницам">
+              <button
+                type="button"
+                class="btn btn-secondary btn-small"
+                :disabled="currentPage <= 1"
+                @click="currentPage--"
+              >
+                ← Назад
+              </button>
+              <span class="stats-pagination__info">
+                {{ currentPage }} / {{ totalPages }}
+              </span>
+              <button
+                type="button"
+                class="btn btn-secondary btn-small"
+                :disabled="currentPage >= totalPages"
+                @click="currentPage++"
+              >
+                Вперёд →
+              </button>
+            </nav>
+          </section>
         </template>
 
         <button
@@ -451,6 +528,7 @@ const dateTo = ref('')
 const sortOrder = ref('newest')
 const pageSize = ref(10)
 const currentPage = ref(1)
+const activeStatsTab = ref('sessions')
 const showFilters = ref(false)
 const importInputRef = ref(null)
 const editingId = ref(null)
@@ -553,6 +631,58 @@ const rangeEnd = computed(() =>
   Math.min(currentPage.value * pageSize.value, filteredSessions.value.length),
 )
 
+const playerStatsRows = computed(() => {
+  const players = new Map()
+
+  for (const session of filteredSessions.value) {
+    const name = (session.hooperName || '').trim() || 'Без имени'
+    const key = name.toLowerCase()
+    const startedAt = new Date(session.startedAt).getTime()
+    const mode = session.mode === 'ai' ? 'AI' : 'Ручной'
+
+    if (!players.has(key)) {
+      players.set(key, {
+        key,
+        name,
+        sessions: 0,
+        attempts: 0,
+        makes: 0,
+        misses: 0,
+        bestStreak: 0,
+        durationMs: 0,
+        firstStartedAt: Number.isFinite(startedAt) ? startedAt : null,
+        lastStartedAt: Number.isFinite(startedAt) ? startedAt : null,
+        modes: new Map(),
+      })
+    }
+
+    const row = players.get(key)
+    row.sessions++
+    row.attempts += Number(session.attempts) || 0
+    row.makes += Number(session.makes) || 0
+    row.misses += Number(session.misses) || 0
+    row.bestStreak = Math.max(row.bestStreak, Number(session.bestStreak) || 0)
+    row.durationMs += Number(session.durationMs) || 0
+    row.modes.set(mode, (row.modes.get(mode) || 0) + 1)
+
+    if (Number.isFinite(startedAt)) {
+      row.firstStartedAt = row.firstStartedAt === null ? startedAt : Math.min(row.firstStartedAt, startedAt)
+      row.lastStartedAt = row.lastStartedAt === null ? startedAt : Math.max(row.lastStartedAt, startedAt)
+    }
+  }
+
+  return [...players.values()]
+    .map((row) => ({
+      ...row,
+      makePercentage: row.attempts > 0 ? Math.round((row.makes / row.attempts) * 100) : 0,
+      averageAttempts: row.sessions > 0 ? (row.attempts / row.sessions).toFixed(1) : '0.0',
+      modeSummary: formatCountSummary(row.modes),
+      firstTrainingDate: formatOptionalDate(row.firstStartedAt),
+      lastTrainingDate: formatOptionalDate(row.lastStartedAt),
+    }))
+    .sort((a, b) => b.attempts - a.attempts || b.sessions - a.sessions || a.name.localeCompare(b.name))
+})
+
 watch([searchQuery, tagFilter, dateFrom, dateTo, sortOrder, pageSize], () => {
   currentPage.value = 1
 })
@@ -599,6 +729,37 @@ function toggleTagFilter(tag) {
   }
 
   tagFilter.value = [...tagFilter.value, tag]
+}
+
+function formatCountSummary(counts) {
+  const entries = [...counts.entries()]
+  if (entries.length === 0) return '—'
+
+  return entries
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([label, count]) => `${label}: ${count}`)
+    .join(', ')
+}
+
+function formatOptionalDate(timestamp) {
+  if (timestamp === null) return '—'
+  return formatDate(new Date(timestamp).toISOString())
+}
+
+function getPlayerStatItems(row) {
+  return [
+    { key: 'makePercentage', label: 'Процент', value: `${row.makePercentage}%` },
+    { key: 'attempts', label: 'Броски', value: row.attempts },
+    { key: 'durationMs', label: 'Время', value: formatDuration(row.durationMs) },
+    { key: 'makes', label: 'Попадания', value: row.makes, tone: 'make' },
+    { key: 'misses', label: 'Промахи', value: row.misses, tone: 'miss' },
+    { key: 'sessions', label: 'Тренировки', value: row.sessions },
+    { key: 'bestStreak', label: 'Лучшая серия', value: row.bestStreak },
+    { key: 'averageAttempts', label: 'Средн. бросков', value: row.averageAttempts },
+    { key: 'firstTrainingDate', label: 'Первая тренировка', value: row.firstTrainingDate },
+    { key: 'lastTrainingDate', label: 'Последняя тренировка', value: row.lastTrainingDate },
+    { key: 'modeSummary', label: 'Режимы', value: row.modeSummary },
+  ]
 }
 
 function getExportSessions() {
