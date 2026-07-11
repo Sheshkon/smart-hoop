@@ -69,7 +69,7 @@ import { TRAJECTORY_KEYS } from '../shot/testTrajectories.js'
 import { createShotStateMachine, SHOT_STATES } from '../shot/shotStateMachine.js'
 import { drawHoopBox } from '../utils/hoopCanvasDrawing.js'
 import { getSceneViewportForOrientation, toPortraitShotSpace } from '../utils/sceneViewport.js'
-import { getOrientation } from '../utils/geometry.js'
+import { distance, getBoxCenter, getOrientation } from '../utils/geometry.js'
 
 const props = defineProps({
   mode: {
@@ -150,6 +150,8 @@ let detector = null
 let poseDetector = null
 /** @type {Promise<void> | null} */
 let poseInitPromise = null
+/** @type {HTMLCanvasElement | null} */
+let poseCropCanvas = null
 const shotMachine = createShotStateMachine()
 const aiTracker = createTracker()
 const poseTracker = createPoseTracker()
@@ -224,6 +226,10 @@ async function initPoseDetector() {
     poseDetector = createPoseDetector(poseSettings.poseMode, {
       modelUrl: poseSettings.poseModel,
       targetFps: poseSettings.poseFps,
+      numPoses: 1,
+      minPoseDetectionConfidence: 0.5,
+      minPosePresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
       keypointConfidenceMin: 0,
     })
 
@@ -303,8 +309,34 @@ function syncCanvasSize() {
   }
 }
 
+function formatConfidencePercent(confidence) {
+  const value = Number(confidence)
+  if (!Number.isFinite(value)) {
+    return ''
+  }
+  return `${Math.round(value * 100)}%`
+}
+
+function drawConfidenceLabel(ctx, text, x, y, color) {
+  if (!text) return
+
+  ctx.save()
+  ctx.font = '700 12px system-ui, sans-serif'
+  const textWidth = ctx.measureText(text).width
+  const labelX = clamp(x, 0, Math.max(0, canvasWidth - textWidth - 12))
+  const labelY = clamp(y, 18, Math.max(18, canvasHeight - 4))
+
+  ctx.fillStyle = 'rgba(13, 13, 26, 0.9)'
+  ctx.fillRect(labelX, labelY - 18, textWidth + 12, 18)
+  ctx.fillStyle = color
+  ctx.fillText(text, labelX + 6, labelY - 5)
+  ctx.restore()
+}
+
 function drawHoop(ctx, hoopDetection) {
   drawHoopBox(ctx, hoopDetection.box)
+  const label = formatConfidencePercent(hoopDetection.confidence)
+  drawConfidenceLabel(ctx, label, hoopDetection.box.x, hoopDetection.box.y - 6, '#81c784')
 }
 
 function drawShooter(ctx, personDetection) {
@@ -357,6 +389,9 @@ function drawBall(ctx, ballDetection, ballCenter) {
   ctx.arc(ballCenter.x, ballCenter.y, 4, 0, Math.PI * 2)
   ctx.fillStyle = '#ffffff'
   ctx.fill()
+
+  const label = formatConfidencePercent(ballDetection.confidence)
+  drawConfidenceLabel(ctx, label, box.x, box.y - 6, isPredicted ? '#ff8a9b' : '#e94560')
 }
 
 function drawTrajectory(ctx, history) {
@@ -484,8 +519,150 @@ function drawSessionScene(ctx, result) {
   }
 }
 
-function runPoseDetection(timestampMs) {
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function getPoseCropCanvas() {
+  if (!poseCropCanvas) {
+    poseCropCanvas = document.createElement('canvas')
+  }
+  return poseCropCanvas
+}
+
+function getVideoDimensions(video) {
+  return {
+    width: video?.videoWidth || video?.naturalWidth || video?.width || 0,
+    height: video?.videoHeight || video?.naturalHeight || video?.height || 0,
+  }
+}
+
+function mapCanvasBoxToVideoBox(canvasBox, video) {
+  const { width: videoWidth, height: videoHeight } = getVideoDimensions(video)
+  if (!videoWidth || !videoHeight || !viewport.renderWidth || !viewport.renderHeight) {
+    return null
+  }
+
+  const scale = Math.max(
+    viewport.renderWidth / videoWidth,
+    viewport.renderHeight / videoHeight,
+  )
+  const displayWidth = videoWidth * scale
+  const displayHeight = videoHeight * scale
+  const cropX = (displayWidth - viewport.renderWidth) / 2
+  const cropY = (displayHeight - viewport.renderHeight) / 2
+
+  const left = (canvasBox.x - viewport.offsetX + cropX) / scale
+  const top = (canvasBox.y - viewport.offsetY + cropY) / scale
+  const right = (canvasBox.x + canvasBox.width - viewport.offsetX + cropX) / scale
+  const bottom = (canvasBox.y + canvasBox.height - viewport.offsetY + cropY) / scale
+
+  const x = clamp(left, 0, videoWidth)
+  const y = clamp(top, 0, videoHeight)
+  const width = clamp(right, 0, videoWidth) - x
+  const height = clamp(bottom, 0, videoHeight) - y
+
+  if (width < 8 || height < 8) {
+    return null
+  }
+
+  return { x, y, width, height }
+}
+
+function getExpandedCanvasBox(box, paddingRatio = 0.2) {
+  const paddingX = box.width * paddingRatio
+  const paddingY = box.height * paddingRatio
+  const x = clamp(box.x - paddingX, 0, canvasWidth)
+  const y = clamp(box.y - paddingY, 0, canvasHeight)
+  const right = clamp(box.x + box.width + paddingX, 0, canvasWidth)
+  const bottom = clamp(box.y + box.height + paddingY, 0, canvasHeight)
+  return {
+    x,
+    y,
+    width: right - x,
+    height: bottom - y,
+  }
+}
+
+function getPoseTargets(result) {
+  const ballCenter = result?.ballCenter ?? null
+
+  return (result?.detections ?? [])
+    .filter((item) => item.className === 'person' && item.box)
+    .sort((a, b) => {
+      if (ballCenter) {
+        return (
+          distance(getBoxCenter(a.box), ballCenter) - distance(getBoxCenter(b.box), ballCenter) ||
+          b.confidence - a.confidence
+        )
+      }
+
+      return a.box.x - b.box.x || b.confidence - a.confidence
+    })
+    .slice(0, 1)
+    .map((detection, index) => ({
+      id: `player-${index + 1}`,
+      detection,
+    }))
+}
+
+function prepareTargetPoseInput(video, targetDetection) {
+  if (!targetDetection?.box) {
+    return { input: video, canvasBox: null }
+  }
+
+  const canvasBox = getExpandedCanvasBox(targetDetection.box)
+  const videoBox = mapCanvasBoxToVideoBox(canvasBox, video)
+  if (!videoBox) {
+    return { input: video, canvasBox: null }
+  }
+
+  const cropCanvas = getPoseCropCanvas()
+  const maxSide = 384
+  const scale = Math.min(maxSide / videoBox.width, maxSide / videoBox.height, 1)
+  cropCanvas.width = Math.max(8, Math.round(videoBox.width * scale))
+  cropCanvas.height = Math.max(8, Math.round(videoBox.height * scale))
+
+  const ctx = cropCanvas.getContext('2d')
+  if (!ctx) {
+    return { input: video, canvasBox: null }
+  }
+
+  ctx.clearRect(0, 0, cropCanvas.width, cropCanvas.height)
+  ctx.drawImage(
+    video,
+    videoBox.x,
+    videoBox.y,
+    videoBox.width,
+    videoBox.height,
+    0,
+    0,
+    cropCanvas.width,
+    cropCanvas.height,
+  )
+
+  return { input: cropCanvas, canvasBox }
+}
+
+function mapCropPosesToCanvas(poses, canvasBox, cropCanvas, poseId) {
+  if (!canvasBox || !cropCanvas?.width || !cropCanvas?.height) {
+    return poses
+  }
+
+  return poses.map((pose) => ({
+    ...pose,
+    id: poseId,
+    keypoints: pose.keypoints.map((keypoint) => ({
+      ...keypoint,
+      x: canvasBox.x + (keypoint.x / cropCanvas.width) * canvasBox.width,
+      y: canvasBox.y + (keypoint.y / cropCanvas.height) * canvasBox.height,
+    })),
+  }))
+}
+
+function runPoseDetection(timestampMs, result = null) {
   poseTracker.keypointConfidenceMin = poseSettings.keypointConfidenceMin
+  poseTracker.holdMs = Math.max(600, Math.ceil(2000 / Math.max(1, poseSettings.poseFps)))
 
   if (!poseDetector || !poseDetectorActive.value || poseSettings.poseMode === 'off') {
     trackedPoses = updatePoseTracking(poseTracker, [], timestampMs)
@@ -499,11 +676,44 @@ function runPoseDetection(timestampMs) {
   }
 
   try {
-    const rawPoses = poseDetector.detect({
-      video,
-      timestampMs,
-    })
-    const canvasPoses = mapPosesToCanvas(rawPoses, video, viewport)
+    const targets = getPoseTargets(result)
+
+    if (targets.length === 0) {
+      const rawPoses = poseDetector.detect({
+        video,
+        timestampMs,
+      })
+      if (rawPoses == null) {
+        return
+      }
+      trackedPoses = updatePoseTracking(poseTracker, mapPosesToCanvas(rawPoses, video, viewport), timestampMs)
+      return
+    }
+
+    const canvasPoses = []
+
+    for (let index = 0; index < targets.length; index += 1) {
+      const target = targets[index]
+      const poseInput = prepareTargetPoseInput(video, target.detection)
+      const rawPoses = poseDetector.detect({
+        video: poseInput.input,
+        timestampMs,
+        force: index > 0,
+      })
+
+      if (rawPoses == null) {
+        if (index === 0) {
+          return
+        }
+        continue
+      }
+
+      const targetPoses = poseInput.canvasBox
+        ? mapCropPosesToCanvas(rawPoses.slice(0, 1), poseInput.canvasBox, poseInput.input, target.id)
+        : mapPosesToCanvas(rawPoses.slice(0, 1), video, viewport)
+      canvasPoses.push(...targetPoses)
+    }
+
     trackedPoses = updatePoseTracking(poseTracker, canvasPoses, timestampMs)
   } catch (err) {
     console.warn('Pose detection failed:', err)
@@ -581,8 +791,8 @@ function renderSessionFrame(timestampMs) {
   }
 
   if (props.showDetectionBoxes) {
-    runPoseDetection(timestampMs)
     const trackedResult = applyTracking(rawResult, timestampMs)
+    runPoseDetection(timestampMs, trackedResult)
 
     emit('frame-result', {
       detections: rawResult.detections,
@@ -616,7 +826,7 @@ function renderSessionFrame(timestampMs) {
   }
 
   processShotDetection(result, timestampMs)
-  runPoseDetection(timestampMs)
+  runPoseDetection(timestampMs, result)
 
   const ctx = canvasRef.value.getContext('2d')
   if (ctx) {

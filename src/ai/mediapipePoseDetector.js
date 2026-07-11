@@ -214,7 +214,7 @@ export function createMediaPipePoseDetector(options = {}) {
 
     detect(input) {
       if (!ready || !landmarker || poseBusy) {
-        return []
+        return null
       }
 
       const element = resolveInputElement(input)
@@ -224,8 +224,8 @@ export function createMediaPipePoseDetector(options = {}) {
 
       const now = performance.now()
       const minInterval = 1000 / Math.max(1, targetFps)
-      if (now - lastDetectAt < minInterval) {
-        return []
+      if (!input?.force && now - lastDetectAt < minInterval) {
+        return null
       }
 
       const { width: inputWidth, height: inputHeight } = getInputDimensions(element)
