@@ -101,6 +101,21 @@
             @input="setPoseFps(Number($event.target.value))"
           >
         </label>
+
+        <label v-if="poseSettings.poseMode === 'mediapipe'" class="form-field settings-fps-field">
+          <span class="form-field__label">
+            Порог уверенности точек скелета: {{ formatThreshold(poseSettings.keypointConfidenceMin) }}
+          </span>
+          <input
+            :value="poseSettings.keypointConfidenceMin"
+            type="range"
+            class="settings-fps-field__range"
+            :min="POSE_KEYPOINT_CONFIDENCE_MIN"
+            :max="POSE_KEYPOINT_CONFIDENCE_MAX"
+            :step="POSE_KEYPOINT_CONFIDENCE_STEP"
+            @input="setPoseKeypointConfidenceMin(Number($event.target.value))"
+          >
+        </label>
       </section>
 
       <section class="settings-section">
@@ -145,8 +160,12 @@ import {
   getPoseModelFileName,
   POSE_FPS_MAX,
   POSE_FPS_MIN,
+  POSE_KEYPOINT_CONFIDENCE_MAX,
+  POSE_KEYPOINT_CONFIDENCE_MIN,
+  POSE_KEYPOINT_CONFIDENCE_STEP,
   poseSettings,
   setPoseFps,
+  setPoseKeypointConfidenceMin,
   setPoseMode,
 } from '../stores/poseSettings.js'
 import { themeSettings, setThemePreference, THEME_OPTIONS } from '../stores/theme.js'

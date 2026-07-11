@@ -7,11 +7,16 @@ const STORAGE_KEY = 'smart-hoop.pose-settings'
 export const POSE_FPS_MIN = 5
 export const POSE_FPS_MAX = 30
 export const POSE_FPS_DEFAULT = 15
+export const POSE_KEYPOINT_CONFIDENCE_MIN = 0.05
+export const POSE_KEYPOINT_CONFIDENCE_MAX = 0.95
+export const POSE_KEYPOINT_CONFIDENCE_STEP = 0.05
+export const POSE_KEYPOINT_CONFIDENCE_DEFAULT = 0.5
 
 export const poseSettings = reactive({
   poseMode: POSE_MODES.MEDIAPIPE,
   poseFps: POSE_FPS_DEFAULT,
   poseModel: POSE_MODEL_RELATIVE,
+  keypointConfidenceMin: POSE_KEYPOINT_CONFIDENCE_DEFAULT,
 })
 
 function clampPoseFps(value) {
@@ -20,6 +25,21 @@ function clampPoseFps(value) {
     return POSE_FPS_DEFAULT
   }
   return Math.min(POSE_FPS_MAX, Math.max(POSE_FPS_MIN, Math.round(fps)))
+}
+
+function clampKeypointConfidence(value) {
+  const confidence = Number(value)
+  if (!Number.isFinite(confidence)) {
+    return POSE_KEYPOINT_CONFIDENCE_DEFAULT
+  }
+  return Math.min(
+    POSE_KEYPOINT_CONFIDENCE_MAX,
+    Math.max(
+      POSE_KEYPOINT_CONFIDENCE_MIN,
+      Math.round(confidence / POSE_KEYPOINT_CONFIDENCE_STEP) *
+        POSE_KEYPOINT_CONFIDENCE_STEP,
+    ),
+  )
 }
 
 function normalizePoseModelPath(stored) {
@@ -55,6 +75,9 @@ function loadSettings() {
     if (typeof parsed.poseModel === 'string' && parsed.poseModel.trim()) {
       poseSettings.poseModel = normalizePoseModelPath(parsed.poseModel)
     }
+    if (parsed.keypointConfidenceMin != null) {
+      poseSettings.keypointConfidenceMin = clampKeypointConfidence(parsed.keypointConfidenceMin)
+    }
   } catch {
     // ignore
   }
@@ -68,6 +91,7 @@ function saveSettings() {
         poseMode: poseSettings.poseMode,
         poseFps: poseSettings.poseFps,
         poseModel: poseSettings.poseModel,
+        keypointConfidenceMin: poseSettings.keypointConfidenceMin,
       }),
     )
   } catch (err) {
@@ -97,6 +121,11 @@ export function setPoseMode(mode, options = {}) {
 
 export function setPoseFps(fps) {
   poseSettings.poseFps = clampPoseFps(fps)
+  saveSettings()
+}
+
+export function setPoseKeypointConfidenceMin(confidence) {
+  poseSettings.keypointConfidenceMin = clampKeypointConfidence(confidence)
   saveSettings()
 }
 

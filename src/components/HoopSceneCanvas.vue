@@ -206,6 +206,7 @@ async function initPoseDetector() {
     poseDetector = createPoseDetector(poseSettings.poseMode, {
       modelUrl: poseSettings.poseModel,
       targetFps: poseSettings.poseFps,
+      keypointConfidenceMin: 0,
     })
 
     if (poseSettings.poseMode === 'off') {
@@ -385,11 +386,15 @@ function drawSessionScene(ctx, result) {
   }
 
   if (trackedPoses.length > 0) {
-    drawPoseSkeleton(ctx, trackedPoses)
+    drawPoseSkeleton(ctx, trackedPoses, {
+      keypointMinConfidence: poseSettings.keypointConfidenceMin,
+    })
   }
 }
 
 function runPoseDetection(timestampMs) {
+  poseTracker.keypointConfidenceMin = poseSettings.keypointConfidenceMin
+
   if (!poseDetector || !poseDetectorActive.value || poseSettings.poseMode === 'off') {
     trackedPoses = updatePoseTracking(poseTracker, [], timestampMs)
     return
