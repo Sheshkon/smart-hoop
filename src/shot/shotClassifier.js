@@ -1,14 +1,87 @@
 import { distance } from '../utils/geometry.js'
 
 const APPROACH_DISTANCE_FACTOR = 1.8
-const BALL_RADIUS_MAKE_OVERLAP_FACTOR = 1
-const RIM_WIDTH_PADDING_FACTOR = 0.18
+const CONFIRMATION_PLANE_RADIUS_FACTOR = 0.45
 
-function getRimHorizontalRange(hoopBox) {
+/**
+ * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {number} [ballRadius]
+ */
+export function getRimControlPlanes(hoopBox, ballRadius = 0) {
+  const radius = Math.max(0, Number(ballRadius) || 0)
+
   return {
-    left: hoopBox.x,
-    right: hoopBox.x + hoopBox.width,
+    entryY: hoopBox.y + hoopBox.height * 0.35,
+    confirmationY:
+      hoopBox.y + hoopBox.height + Math.min(hoopBox.height, radius * CONFIRMATION_PLANE_RADIUS_FACTOR),
+    innerLeft: hoopBox.x + radius,
+    innerRight: hoopBox.x + hoopBox.width - radius,
+    exitLeft: hoopBox.x + radius,
+    exitRight: hoopBox.x + hoopBox.width - radius,
+    guardLeft: hoopBox.x - hoopBox.width * 0.9,
+    guardRight: hoopBox.x + hoopBox.width * 1.9,
+    guardTop: hoopBox.y - hoopBox.width * 1.2,
+    guardBottom: hoopBox.y + hoopBox.width * 1.8,
   }
+}
+
+/**
+ * @param {{ x: number, y: number }} ballCenter
+ * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {number} [ballRadius]
+ */
+export function isBallCenterInsideInnerOpening(ballCenter, hoopBox, ballRadius = 0) {
+  return isBallWithinHoopWidth(ballCenter, hoopBox, ballRadius)
+}
+
+/**
+ * @param {{ x: number, y: number } | null} prevCenter
+ * @param {{ x: number, y: number }} currentCenter
+ * @param {number} planeY
+ * @param {number} [ballRadius]
+ * @param {'leading' | 'center' | 'trailing'} [edge]
+ * @returns {{ direction: 'down' | 'up', x: number, y: number } | null}
+ */
+export function getBallPlaneCrossing(
+  prevCenter,
+  currentCenter,
+  planeY,
+  ballRadius = 0,
+  edge = 'center',
+) {
+  if (!prevCenter || currentCenter.y === prevCenter.y) return null
+
+  const radius = Math.max(0, Number(ballRadius) || 0)
+  const offset = edge === 'leading' ? radius : edge === 'trailing' ? -radius : 0
+  const prevEdgeY = prevCenter.y + offset
+  const currentEdgeY = currentCenter.y + offset
+  const crossedDown = prevEdgeY < planeY && currentEdgeY >= planeY
+  const crossedUp = prevEdgeY > planeY && currentEdgeY <= planeY
+  if (!crossedDown && !crossedUp) return null
+
+  const centerYAtPlane = planeY - offset
+  const progress = (centerYAtPlane - prevCenter.y) / (currentCenter.y - prevCenter.y)
+  const crossingX = prevCenter.x + (currentCenter.x - prevCenter.x) * progress
+
+  return {
+    direction: crossedDown ? 'down' : 'up',
+    x: crossingX,
+    y: planeY,
+  }
+}
+
+/**
+ * @param {{ x: number, y: number }} ballCenter
+ * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ */
+export function isBallOutsideGuardZone(ballCenter, hoopBox) {
+  const { guardLeft, guardRight, guardTop, guardBottom } = getRimControlPlanes(hoopBox)
+  return (
+    ballCenter.x < guardLeft ||
+    ballCenter.x > guardRight ||
+    ballCenter.y < guardTop ||
+    ballCenter.y > guardBottom
+  )
 }
 
 function isPointInBox(point, box) {
@@ -69,15 +142,16 @@ export function isBallBelowHoop(ballCenter, hoopBox) {
 /**
  * @param {{ x: number, y: number }} ballCenter
  * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {number} [ballRadius]
  */
-export function isBallInRimZone(ballCenter, hoopBox) {
-  const { left, right } = getRimHorizontalRange(hoopBox)
+export function isBallInRimZone(ballCenter, hoopBox, ballRadius = 0) {
+  const radius = Math.max(0, Number(ballRadius) || 0)
 
   return (
-    ballCenter.x >= left &&
-    ballCenter.x <= right &&
-    ballCenter.y >= hoopBox.y &&
-    ballCenter.y <= hoopBox.y + hoopBox.height
+    ballCenter.x - radius >= hoopBox.x &&
+    ballCenter.x + radius <= hoopBox.x + hoopBox.width &&
+    ballCenter.y + radius >= hoopBox.y &&
+    ballCenter.y - radius <= hoopBox.y + hoopBox.height
   )
 }
 
@@ -85,10 +159,16 @@ export function isBallInRimZone(ballCenter, hoopBox) {
  * @param {{ x: number, y: number } | null} prevCenter
  * @param {{ x: number, y: number }} currentCenter
  * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {number} [ballRadius]
  */
-export function didBallCrossRimZone(prevCenter, currentCenter, hoopBox) {
-  if (!prevCenter) return isBallInRimZone(currentCenter, hoopBox)
-  if (isBallInRimZone(prevCenter, hoopBox) || isBallInRimZone(currentCenter, hoopBox)) return true
+export function didBallCrossRimZone(prevCenter, currentCenter, hoopBox, ballRadius = 0) {
+  if (!prevCenter) return isBallInRimZone(currentCenter, hoopBox, ballRadius)
+  if (
+    isBallInRimZone(prevCenter, hoopBox, ballRadius) ||
+    isBallInRimZone(currentCenter, hoopBox, ballRadius)
+  ) {
+    return true
+  }
 
   const rimTop = hoopBox.y
   const rimBottom = hoopBox.y + hoopBox.height
@@ -102,8 +182,7 @@ export function didBallCrossRimZone(prevCenter, currentCenter, hoopBox) {
   const progress = (crossingY - prevCenter.y) / (currentCenter.y - prevCenter.y)
   const crossingX = prevCenter.x + (currentCenter.x - prevCenter.x) * progress
 
-  const { left, right } = getRimHorizontalRange(hoopBox)
-  return crossingX >= left && crossingX <= right
+  return isBallWithinHoopWidth({ x: crossingX, y: crossingY }, hoopBox, ballRadius)
 }
 
 /**
@@ -117,36 +196,52 @@ export function getRimLineCrossing(prevCenter, currentCenter, hoopBox, ballRadiu
   if (!prevCenter || currentCenter.y === prevCenter.y) return null
 
   const lineY = hoopBox.y + hoopBox.height / 2
-  const crossedDown = prevCenter.y < lineY && currentCenter.y >= lineY
-  const crossedUp = prevCenter.y > lineY && currentCenter.y <= lineY
+  const radius = Math.max(0, Number(ballRadius) || 0)
+  const prevLeadingY = prevCenter.y + radius
+  const currentLeadingY = currentCenter.y + radius
+  const crossedDown = prevLeadingY < lineY && currentLeadingY >= lineY
+  const crossedUp = prevCenter.y - radius > lineY && currentCenter.y - radius <= lineY
   if (!crossedDown && !crossedUp) return null
 
-  const progress = (lineY - prevCenter.y) / (currentCenter.y - prevCenter.y)
+  const centerYAtLine = crossedDown ? lineY - radius : lineY + radius
+  const progress = (centerYAtLine - prevCenter.y) / (currentCenter.y - prevCenter.y)
   const crossingX = prevCenter.x + (currentCenter.x - prevCenter.x) * progress
-  const { left, right } = getRimHorizontalRange(hoopBox)
-  const makePadding = Math.min(
-    hoopBox.width * 0.55,
-    hoopBox.width * RIM_WIDTH_PADDING_FACTOR +
-      Math.max(0, ballRadius) * BALL_RADIUS_MAKE_OVERLAP_FACTOR,
-  )
-  const missPadding = hoopBox.width * 0.75
 
   return {
     direction: crossedDown ? 'down' : 'up',
     x: crossingX,
     y: lineY,
-    withinWidth: crossingX >= left - makePadding && crossingX <= right + makePadding,
-    nearHoop: crossingX >= left - missPadding && crossingX <= right + missPadding,
+    withinWidth: isBallWithinHoopWidth({ x: crossingX, y: centerYAtLine }, hoopBox, radius),
+    nearHoop: doesBallIntersectHoopBox({ x: crossingX, y: centerYAtLine }, hoopBox, radius),
   }
 }
 
 /**
  * @param {{ x: number, y: number }} ballCenter
  * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {number} [ballRadius]
  */
-export function isBallWithinHoopWidth(ballCenter, hoopBox) {
-  const { left, right } = getRimHorizontalRange(hoopBox)
-  return ballCenter.x >= left && ballCenter.x <= right
+export function isBallWithinHoopWidth(ballCenter, hoopBox, ballRadius = 0) {
+  const radius = Math.max(0, Number(ballRadius) || 0)
+  return (
+    ballCenter.x - radius >= hoopBox.x &&
+    ballCenter.x + radius <= hoopBox.x + hoopBox.width
+  )
+}
+
+/**
+ * @param {{ x: number, y: number }} ballCenter
+ * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {number} [ballRadius]
+ */
+export function doesBallIntersectHoopBox(ballCenter, hoopBox, ballRadius = 0) {
+  const radius = Math.max(0, Number(ballRadius) || 0)
+  return (
+    ballCenter.x + radius >= hoopBox.x &&
+    ballCenter.x - radius <= hoopBox.x + hoopBox.width &&
+    ballCenter.y + radius >= hoopBox.y &&
+    ballCenter.y - radius <= hoopBox.y + hoopBox.height
+  )
 }
 
 /**
@@ -182,8 +277,9 @@ export function hasPassedHoopLevel(ballCenter, hoopBox) {
 /**
  * @param {{ x: number, y: number }} ballCenter
  * @param {{ x: number, y: number, width: number, height: number }} hoopBox
+ * @param {number} [ballRadius]
  */
-export function isWideMiss(ballCenter, hoopBox) {
+export function missByPassingHoopLevel(ballCenter, hoopBox, ballRadius = 0) {
   if (!hasPassedHoopLevel(ballCenter, hoopBox)) return false
-  return !isBallWithinHoopWidth(ballCenter, hoopBox)
+  return !doesBallIntersectHoopBox(ballCenter, hoopBox, ballRadius)
 }

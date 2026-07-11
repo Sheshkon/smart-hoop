@@ -112,7 +112,18 @@ async function endSession() {
   }
 }
 
-function recordShot(type, { source = 'manual', confidence = 1 } = {}) {
+function recordShot(
+  type,
+  {
+    source = 'manual',
+    confidence = 1,
+    reason = null,
+    evidence = null,
+    missType = null,
+    isSwish = false,
+    entryAngle = null,
+  } = {},
+) {
   if (status.value !== 'active') return
 
   const event = {
@@ -121,6 +132,11 @@ function recordShot(type, { source = 'manual', confidence = 1 } = {}) {
     timestampMs: session.value.durationMs,
     confidence,
     source,
+    reason,
+    missType,
+    isSwish,
+    entryAngle,
+    evidence,
   }
 
   session.value.shotEvents.push(event)

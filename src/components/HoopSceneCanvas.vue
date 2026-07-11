@@ -159,11 +159,12 @@ const orientationLabel = computed(() =>
 
 const shotStateLabels = {
   [SHOT_STATES.idle]: '',
-  [SHOT_STATES.ballDetected]: 'Мяч',
-  [SHOT_STATES.approachingHoop]: 'Подлёт',
-  [SHOT_STATES.inRimZone]: 'Кольцо',
+  [SHOT_STATES.candidate]: 'Мяч',
+  [SHOT_STATES.armed]: 'Подлёт',
+  [SHOT_STATES.rimInteractionPending]: 'Кольцо',
   [SHOT_STATES.made]: 'Попадание!',
   [SHOT_STATES.missed]: 'Промах',
+  [SHOT_STATES.unknown]: 'Неясно',
   [SHOT_STATES.cooldown]: 'Пауза',
 }
 
@@ -811,24 +812,25 @@ function toPortraitBallHistory(history, result) {
   if (!Array.isArray(history) || !result.hoopBox) return []
 
   return history
-    .map((point) =>
-      toPortraitShotSpace(
+    .map((point) => {
+      const mapped = toPortraitShotSpace(
         point,
         result.hoopBox,
         result.viewport,
         result.orientation,
-      ).ballCenter,
-    )
+      ).ballCenter
+
+      return mapped ? { ...mapped, t: point.t } : null
+    })
     .filter(Boolean)
 }
 
 function processShotDetection(result, timestampMs) {
   if (!props.autoDetectShots || props.paused || !result.hoopBox) return
 
-  const shotBallCenter = result.rawBallCenter ?? result.ballCenter
-  const shotBallHistorySource =
-    result.rawBallHistory?.length ? result.rawBallHistory : result.ballHistory
-  const ballHistory = toPortraitBallHistory(shotBallHistorySource, result)
+  const shotBallCenter = result.ballCenter
+  const ballHistory = toPortraitBallHistory(result.ballHistory, result)
+  const rawBallHistory = toPortraitBallHistory(result.rawBallHistory, result)
   const ballDetection = result.detections.find((item) => item.className === 'ball')
   const ballRadius = ballDetection?.box
     ? (Math.min(ballDetection.box.width, ballDetection.box.height) / 2) / result.viewport.scale
@@ -846,15 +848,31 @@ function processShotDetection(result, timestampMs) {
     hoopBox,
     timestampMs,
     ballVisible: Boolean(ballCenter),
+    ballMeasured: result.ballMeasured,
+    ballTrackState: result.ballTrackState,
+    ballVelocity: result.ballVelocity,
+    rawBallHistory,
     ballRadius,
     ballHistory,
     backboardZone,
+    hoopStable: result.hoopStable,
+    hoopStability: result.hoopStability,
+    hoopLost: result.hoopLost,
+    trackId: result.ballTrackId,
   })
 
   shotState.value = machineResult.state
 
   if (machineResult.event) {
-    emit('shot-detected', { type: machineResult.event, confidence: 0.9 })
+    emit('shot-detected', {
+      type: machineResult.event,
+      confidence: machineResult.confidence ?? 0,
+      reason: machineResult.reason,
+      missType: machineResult.missType,
+      isSwish: machineResult.isSwish,
+      entryAngle: machineResult.entryAngle,
+      evidence: machineResult.evidence,
+    })
   }
 }
 

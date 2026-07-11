@@ -119,6 +119,7 @@ const mediaMeta = computed(() => {
 const lastShotLabel = computed(() => {
   if (lastShotType.value === 'make') return 'Последний: попадание'
   if (lastShotType.value === 'miss') return 'Последний: промах'
+  if (lastShotType.value === 'unknown') return 'Последний: неясно'
   return ''
 })
 
@@ -141,6 +142,7 @@ const resultTitle = computed(() => {
   if (detectorState.value === 'error') return 'AI-модель недоступна'
   if (lastShotType.value === 'make') return 'Попадание определено'
   if (lastShotType.value === 'miss') return 'Промах определён'
+  if (lastShotType.value === 'unknown') return 'Недостаточно данных'
   if (detectorState.value === 'loading') return 'Загрузка AI-модели'
   if (detectorState.value === 'ready') return 'Ожидаем бросок'
   if (ballVisible.value || hoopVisible.value) return 'Трекинг активен'

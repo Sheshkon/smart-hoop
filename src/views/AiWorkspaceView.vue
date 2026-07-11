@@ -98,11 +98,11 @@ const statusLabel = computed(() => {
   return labels[status.value]
 })
 
-function handleAutoShot({ type, confidence }) {
+function handleAutoShot({ type, confidence, reason, evidence, missType, isSwish, entryAngle }) {
   if (type === 'make') {
-    recordMake({ source: 'ai', confidence })
+    recordMake({ source: 'ai', confidence, reason, evidence, missType, isSwish, entryAngle })
   } else if (type === 'miss') {
-    recordMiss({ source: 'ai', confidence })
+    recordMiss({ source: 'ai', confidence, reason, evidence, missType, isSwish, entryAngle })
   }
 }
 </script>

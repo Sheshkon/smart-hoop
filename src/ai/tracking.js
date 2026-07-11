@@ -36,7 +36,13 @@ function getDetectionRole(detection) {
   return detection.appClass ?? detection.className
 }
 
-function pushBallHistory(history, lastTimestampRef, point, timestampMs) {
+function pushBallHistory(
+  history,
+  lastTimestampRef,
+  point,
+  timestampMs,
+  breakDistancePx = BALL_HISTORY_BREAK_DISTANCE_PX,
+) {
   if (
     history.length > 0 &&
     timestampMs - lastTimestampRef.value < BALL_HISTORY_INTERVAL_MS
@@ -49,7 +55,7 @@ function pushBallHistory(history, lastTimestampRef, point, timestampMs) {
   if (
     previous &&
     (timestampMs - previous.t > BALL_HISTORY_BREAK_MS ||
-      distance(previous, point) > BALL_HISTORY_BREAK_DISTANCE_PX)
+      distance(previous, point) > breakDistancePx)
   ) {
     history.length = 0
   }
@@ -101,6 +107,29 @@ function pushHoopSourceBox(history, box) {
   }
 
   return getMedianBox(history)
+}
+
+function getHoopStability(history) {
+  if (history.length < 3) {
+    return {
+      stable: history.length > 0,
+      score: history.length > 0 ? 0.65 : 0,
+    }
+  }
+
+  const median = getMedianBox(history)
+  const medianCenter = getBoxCenter(median)
+  const referenceWidth = Math.max(1, median.width)
+  const centerOffsets = history.map((box) => distance(getBoxCenter(box), medianCenter) / referenceWidth)
+  const widthOffsets = history.map((box) => Math.abs(box.width - median.width) / referenceWidth)
+  const maxCenterOffset = Math.max(...centerOffsets)
+  const maxWidthOffset = Math.max(...widthOffsets)
+  const score = 1 - Math.min(1, maxCenterOffset / 0.22 + maxWidthOffset / 0.35)
+
+  return {
+    stable: maxCenterOffset <= 0.18 && maxWidthOffset <= 0.25,
+    score: Math.max(0, score),
+  }
 }
 
 function createBallKalmanFilter() {
@@ -434,6 +463,8 @@ export function createTracker() {
   let lastHoopSourceBox = null
   let lastHoopDetection = null
   let hasSeenHoop = false
+  let ballTrackId = 0
+  let activeBallTrackId = null
   const ballKalman = createBallKalmanFilter()
 
   function reset() {
@@ -453,6 +484,8 @@ export function createTracker() {
     lastHoopSourceBox = null
     lastHoopDetection = null
     hasSeenHoop = false
+    ballTrackId = 0
+    activeBallTrackId = null
     ballKalman.reset()
   }
 
@@ -516,6 +549,10 @@ export function createTracker() {
     const displayHoopDetection = lastHoopDetection
       ? { ...lastHoopDetection, box: displayHoopBox }
       : null
+    const hoopStability = getHoopStability(hoopSourceHistory)
+    const ballHistoryBreakDistancePx = displayHoopBox
+      ? Math.max(80, displayHoopBox.width * 2.2)
+      : BALL_HISTORY_BREAK_DISTANCE_PX
 
     const predictedCenter = predictBallCenter(timestampMs)
     const ballCandidates = detections.filter((item) => getDetectionRole(item) === 'ball')
@@ -535,11 +572,20 @@ export function createTracker() {
     let ballCenter = null
     let rawBallCenter = null
     let ballTrackState = 'lost'
+    let ballMeasured = false
+    let ballConfidence = 0
     let displayBallDetection = null
 
     if (ballDetection) {
+      if (!trackIsRecent || activeBallTrackId == null) {
+        ballTrackId += 1
+        activeBallTrackId = ballTrackId
+      }
+
       const detectedCenter = getBoxCenter(ballDetection.box)
       rawBallCenter = detectedCenter
+      ballMeasured = true
+      ballConfidence = ballDetection.confidence
       const measuredCenter =
         ballDetection.confidence < BALL_CONFIDENCE_MIN
           ? smoothPoint(lastBallCenter, detectedCenter, BALL_SMOOTHING_ALPHA_TRACKED)
@@ -557,14 +603,28 @@ export function createTracker() {
       }
 
       if (!paused) {
-        pushBallHistory(ballHistory, lastHistoryTimestamp, ballCenter, timestampMs)
-        pushBallHistory(rawBallHistory, lastRawHistoryTimestamp, rawBallCenter, timestampMs)
+        pushBallHistory(
+          ballHistory,
+          lastHistoryTimestamp,
+          ballCenter,
+          timestampMs,
+          ballHistoryBreakDistancePx,
+        )
+        pushBallHistory(
+          rawBallHistory,
+          lastRawHistoryTimestamp,
+          rawBallCenter,
+          timestampMs,
+          ballHistoryBreakDistancePx,
+        )
       }
     } else if (predictedCenter && lastBallBox) {
       ballCenter = smoothPoint(lastBallCenter, predictedCenter, BALL_SMOOTHING_ALPHA_PREDICTED)
       lastBallCenter = { ...ballCenter }
       lastBallUpdatedAt = timestampMs
       ballTrackState = 'predicted'
+      ballMeasured = false
+      ballConfidence = 0.2
       const size = Math.max(lastBallBox.width, lastBallBox.height)
       displayBallDetection = {
         className: 'ball',
@@ -574,7 +634,13 @@ export function createTracker() {
       }
 
       if (!paused) {
-        pushBallHistory(ballHistory, lastHistoryTimestamp, ballCenter, timestampMs)
+        pushBallHistory(
+          ballHistory,
+          lastHistoryTimestamp,
+          ballCenter,
+          timestampMs,
+          ballHistoryBreakDistancePx,
+        )
       }
     } else if (lastBallDetectedAt > 0 && timestampMs - lastBallDetectedAt > BALL_COAST_MAX_MS) {
       lastBallCenter = null
@@ -583,6 +649,7 @@ export function createTracker() {
       lastBallUpdatedAt = 0
       lastBallBox = null
       lastBallVelocity = null
+      activeBallTrackId = null
       ballKalman.reset()
       ballHistory.length = 0
       rawBallHistory.length = 0
@@ -640,9 +707,14 @@ export function createTracker() {
       rawBallHistory: rawBallHistory.map((point) => ({ ...point })),
       ballVelocity,
       ballTrackState,
+      ballMeasured,
+      ballConfidence,
+      ballTrackId: activeBallTrackId,
       shooterDetection,
       hoopBox: displayHoopBox,
       hoopSourceBox: lastHoopSourceBox ? { ...lastHoopSourceBox } : null,
+      hoopStable: hoopStability.stable,
+      hoopStability: hoopStability.score,
       viewport,
       orientation,
       hoopLost: hoopWarning != null,
