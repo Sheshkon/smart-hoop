@@ -150,7 +150,7 @@ import {
   CONF_THRESHOLD_MAX,
   CONF_THRESHOLD_MIN,
   CONF_THRESHOLD_STEP,
-  DETECTOR_CLASSES,
+  getAiDetectorModel,
 } from '../ai/detectorModels.js'
 import { POSE_MODES } from '../ai/poseDetectorFactory.js'
 import {
@@ -175,7 +175,7 @@ import {
 import { themeSettings, setThemePreference, THEME_OPTIONS } from '../stores/theme.js'
 
 const aiModels = AI_DETECTOR_MODELS
-const detectorClasses = DETECTOR_CLASSES
+const detectorClasses = computed(() => getAiDetectorModel(aiModelSettings.modelId).classes)
 const poseModelFileName = computed(() => getPoseModelFileName())
 
 function formatThreshold(value) {

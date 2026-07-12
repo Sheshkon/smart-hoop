@@ -24,7 +24,7 @@ export function createOnnxDetector() {
       const classConfThresholds = getSelectedClassConfThresholds()
 
       try {
-        await workerClient.init(modelUrl, model.inputSize, classConfThresholds)
+        await workerClient.init(modelUrl, model.inputSize, classConfThresholds, model.classes)
       } catch (err) {
         initError = err instanceof Error ? err : new Error(String(err))
         this.initError = initError

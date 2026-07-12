@@ -458,6 +458,7 @@ export function createTracker() {
   let lastBallDetectedAt = 0
   let lastBallUpdatedAt = 0
   let lastBallBox = null
+  let lastBallConfidence = 0
   let lastBallVelocity = null
   let lastHoopBox = null
   let lastHoopSourceBox = null
@@ -479,6 +480,7 @@ export function createTracker() {
     lastBallDetectedAt = 0
     lastBallUpdatedAt = 0
     lastBallBox = null
+    lastBallConfidence = 0
     lastBallVelocity = null
     lastHoopBox = null
     lastHoopSourceBox = null
@@ -586,6 +588,7 @@ export function createTracker() {
       rawBallCenter = detectedCenter
       ballMeasured = true
       ballConfidence = ballDetection.confidence
+      lastBallConfidence = ballDetection.confidence
       const measuredCenter =
         ballDetection.confidence < BALL_CONFIDENCE_MIN
           ? smoothPoint(lastBallCenter, detectedCenter, BALL_SMOOTHING_ALPHA_TRACKED)
@@ -624,11 +627,12 @@ export function createTracker() {
       lastBallUpdatedAt = timestampMs
       ballTrackState = 'predicted'
       ballMeasured = false
-      ballConfidence = 0.2
+      ballConfidence = lastBallConfidence
       const size = Math.max(lastBallBox.width, lastBallBox.height)
       displayBallDetection = {
         className: 'ball',
-        confidence: 0.2,
+        confidence: lastBallConfidence,
+        trackConfidence: 0.2,
         box: boxFromCenter(ballCenter, size),
         predicted: true,
       }
@@ -648,6 +652,7 @@ export function createTracker() {
       lastBallDetectedAt = 0
       lastBallUpdatedAt = 0
       lastBallBox = null
+      lastBallConfidence = 0
       lastBallVelocity = null
       activeBallTrackId = null
       ballKalman.reset()

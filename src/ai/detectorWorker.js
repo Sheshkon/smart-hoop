@@ -1,6 +1,10 @@
 import * as ort from 'onnxruntime-web'
 import './ortSetup.js'
-import { DEFAULT_CLASS_CONF_THRESHOLDS, normalizeClassConfThresholds } from './detectorModels.js'
+import {
+  DEFAULT_CLASS_CONF_THRESHOLDS,
+  DETECTOR_CLASSES,
+  normalizeClassConfThresholds,
+} from './detectorModels.js'
 import {
   mapDetectionToCanvas,
   postprocessYoloOutput,
@@ -15,6 +19,8 @@ let inputSize = 416
 let inferInFlight = false
 /** @type {number[]} */
 let classConfThresholds = [...DEFAULT_CLASS_CONF_THRESHOLDS]
+/** @type {import('./detectorModels.js').DetectorClassMeta[]} */
+let detectorClasses = DETECTOR_CLASSES
 
 async function createInferenceSession(modelUrl) {
   const baseOptions = {
@@ -38,10 +44,11 @@ async function createInferenceSession(modelUrl) {
   })
 }
 
-async function handleInit(modelUrl, size, thresholds) {
+async function handleInit(modelUrl, size, thresholds, classes) {
   inputSize = size
+  detectorClasses = classes?.length ? classes : DETECTOR_CLASSES
   if (thresholds) {
-    classConfThresholds = normalizeClassConfThresholds(thresholds)
+    classConfThresholds = normalizeClassConfThresholds(thresholds, detectorClasses)
   }
   session = await createInferenceSession(modelUrl)
   inputName = session.inputNames[0] ?? 'images'
@@ -74,7 +81,10 @@ async function handleDetect(data) {
 
     const outputs = await session.run({ [inputName]: tensor })
     const output = outputs[outputName]
-    const rawDetections = postprocessYoloOutput(output, { classConfThresholds })
+    const rawDetections = postprocessYoloOutput(output, {
+      classConfThresholds,
+      classes: detectorClasses,
+    })
     const detections = rawDetections.map((item) =>
       mapDetectionToCanvas(
         item,
@@ -83,6 +93,7 @@ async function handleDetect(data) {
         canvasHeight,
         viewport,
         inputSize,
+        detectorClasses,
       ),
     )
 
@@ -101,7 +112,12 @@ self.onmessage = async (event) => {
 
   if (type === 'init') {
     try {
-      await handleInit(event.data.modelUrl, event.data.inputSize, event.data.classConfThresholds)
+      await handleInit(
+        event.data.modelUrl,
+        event.data.inputSize,
+        event.data.classConfThresholds,
+        event.data.classes,
+      )
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       self.postMessage({ type: 'init-error', message })
@@ -110,7 +126,10 @@ self.onmessage = async (event) => {
   }
 
   if (type === 'set-thresholds') {
-    classConfThresholds = normalizeClassConfThresholds(event.data.classConfThresholds)
+    classConfThresholds = normalizeClassConfThresholds(
+      event.data.classConfThresholds,
+      detectorClasses,
+    )
     return
   }
 

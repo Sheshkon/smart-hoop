@@ -148,13 +148,15 @@ export function nonMaxSuppression(boxes, iouThreshold = 0.45) {
 
 /**
  * @param {import('onnxruntime-web').Tensor} output
- * @param {{ confThreshold?: number, iouThreshold?: number, classConfThresholds?: number[] }} [options]
+ * @param {{ confThreshold?: number, iouThreshold?: number, classConfThresholds?: number[], classes?: import('./detectorModels.js').DetectorClassMeta[] }} [options]
  */
 export function postprocessYoloOutput(output, options = {}) {
   const confThreshold = options.confThreshold ?? 0.25
   const iouThreshold = options.iouThreshold ?? 0.45
+  const classes = options.classes ?? DETECTOR_CLASSES
   const classConfThresholds = normalizeClassConfThresholds(
     options.classConfThresholds ?? DEFAULT_CLASS_CONF_THRESHOLDS,
+    classes,
   )
 
   const [, numChannels, numBoxes] = output.dims
@@ -204,6 +206,7 @@ export function postprocessYoloOutput(output, options = {}) {
  * @param {number} canvasHeight
  * @param {{ offsetX: number, offsetY: number, renderWidth: number, renderHeight: number }} viewport
  * @param {number} [inputSize]
+ * @param {import('./detectorModels.js').DetectorClassMeta[]} [classes]
  */
 export function mapDetectionToCanvas(
   detection,
@@ -212,6 +215,7 @@ export function mapDetectionToCanvas(
   canvasHeight,
   viewport,
   inputSize,
+  classes = DETECTOR_CLASSES,
 ) {
   const resolvedInputSize = inputSize ?? preprocessMeta.inputSize
   const videoBox = mapModelBoxToVideo(detection.box, preprocessMeta)
@@ -227,7 +231,7 @@ export function mapDetectionToCanvas(
     },
   )
 
-  const classMeta = DETECTOR_CLASSES[detection.classIndex]
+  const classMeta = classes[detection.classIndex]
   const className = classMeta?.className ?? `class_${detection.classIndex}`
 
   return {

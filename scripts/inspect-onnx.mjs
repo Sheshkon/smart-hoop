@@ -1,7 +1,7 @@
 import * as ort from 'onnxruntime-web'
 import { readFileSync } from 'node:fs'
 
-const modelPath = new URL('../public/models/best_640.onnx', import.meta.url)
+const modelPath = new URL('../public/models/nano/basketball_nano_640.onnx', import.meta.url)
 const buffer = readFileSync(modelPath)
 
 const session = await ort.InferenceSession.create(buffer, {

@@ -1,7 +1,8 @@
 /** @typedef {{ index: number, className: string, label: string, roleLabel: string, appClass: 'ball' | 'hoop' | 'person' | null }} DetectorClassMeta */
+/** @typedef {{ id: string, label: string, description: string, fileName: string, inputSize: number, classes: DetectorClassMeta[] }} AiDetectorModel */
 
 /** @type {DetectorClassMeta[]} */
-export const DETECTOR_CLASSES = [
+export const EVENT_NANO_DETECTOR_CLASSES = [
   {
     index: 0,
     className: 'ball',
@@ -39,39 +40,82 @@ export const DETECTOR_CLASSES = [
   },
 ]
 
+/** @type {DetectorClassMeta[]} */
+export const BASKETBALL_NANO_DETECTOR_CLASSES = [
+  {
+    index: 0,
+    className: 'ball',
+    label: 'Мяч',
+    roleLabel: 'Мяч для игровой логики',
+    appClass: 'ball',
+  },
+  {
+    index: 1,
+    className: 'human',
+    label: 'Игрок',
+    roleLabel: 'Игрок для игровой логики',
+    appClass: 'person',
+  },
+  {
+    index: 2,
+    className: 'rim',
+    label: 'Кольцо',
+    roleLabel: 'Кольцо для игровой логики',
+    appClass: 'hoop',
+  },
+]
+
+export const DETECTOR_CLASSES = BASKETBALL_NANO_DETECTOR_CLASSES
+
 export const DEFAULT_CLASS_CONF_THRESHOLDS = [0.15, 0.15, 0.15, 0.15, 0.15]
 
-export const AI_MODEL_SETTINGS_VERSION = 5
+export const AI_MODEL_SETTINGS_VERSION = 7
 
 export const CONF_THRESHOLD_MIN = 0.05
 export const CONF_THRESHOLD_MAX = 0.95
 export const CONF_THRESHOLD_STEP = 0.05
 
+/**
+ * @param {number} size
+ * @returns {AiDetectorModel}
+ */
+function createBasketballNanoModel(size) {
+  return {
+    id: `basketball-nano-${size}`,
+    label: `Basketball Nano (${size})`,
+    description: 'Классы: мяч, игрок, кольцо',
+    fileName: `nano/basketball_nano_${size}.onnx`,
+    inputSize: size,
+    classes: BASKETBALL_NANO_DETECTOR_CLASSES,
+  }
+}
+
+/**
+ * @param {number} size
+ * @returns {AiDetectorModel}
+ */
+function createEventNanoModel(size) {
+  return {
+    id: `event-nano-${size}`,
+    label: `Event Nano (${size})`,
+    description: 'Классы: мяч, попадание, игрок, кольцо, бросок',
+    fileName: `nano/best_${size}.onnx`,
+    inputSize: size,
+    classes: EVENT_NANO_DETECTOR_CLASSES,
+  }
+}
+
+/** @type {AiDetectorModel[]} */
 export const AI_DETECTOR_MODELS = [
-  {
-    id: 'basketball-detection-640',
-    label: 'Basketball Detection (640)',
-    description: 'Классы: мяч, попадание, игрок, кольцо, бросок',
-    fileName: 'best_640.onnx',
-    inputSize: 640,
-  },
-  {
-    id: 'basketball-detection-480',
-    label: 'Basketball Detection (480)',
-    description: 'Классы: мяч, попадание, игрок, кольцо, бросок',
-    fileName: 'best_480.onnx',
-    inputSize: 480,
-  },
-  {
-    id: 'basketball-detection-320',
-    label: 'Basketball Detection (320)',
-    description: 'Классы: мяч, попадание, игрок, кольцо, бросок',
-    fileName: 'best_320.onnx',
-    inputSize: 320,
-  },
+  createBasketballNanoModel(640),
+  createBasketballNanoModel(480),
+  createBasketballNanoModel(352),
+  createEventNanoModel(640),
+  createEventNanoModel(480),
+  createEventNanoModel(320),
 ]
 
-export const DEFAULT_AI_MODEL_ID = AI_DETECTOR_MODELS[0].id
+export const DEFAULT_AI_MODEL_ID = 'basketball-nano-640'
 
 /**
  * @param {string} [id]
@@ -105,8 +149,8 @@ export function clampClassConfThreshold(index, value) {
 /**
  * @param {number[] | undefined} thresholds
  */
-export function normalizeClassConfThresholds(thresholds) {
-  return DETECTOR_CLASSES.map((_, index) =>
+export function normalizeClassConfThresholds(thresholds, classes = DETECTOR_CLASSES) {
+  return classes.map((_, index) =>
     clampClassConfThreshold(index, thresholds?.[index] ?? DEFAULT_CLASS_CONF_THRESHOLDS[index]),
   )
 }

@@ -118,5 +118,8 @@ export function getSelectedAiDetectorModel() {
 }
 
 export function getSelectedClassConfThresholds() {
-  return normalizeClassConfThresholds(aiModelSettings.classConfThresholds)
+  return normalizeClassConfThresholds(
+    aiModelSettings.classConfThresholds,
+    getSelectedAiDetectorModel().classes,
+  )
 }
