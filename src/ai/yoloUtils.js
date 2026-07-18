@@ -5,11 +5,8 @@ import {
   normalizeClassConfThresholds,
 } from './detectorModels.js'
 
-/**
- * @param {HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap} source
- * @param {number} [inputSize]
- * @returns {{ tensorData: Float32Array, scaleX: number, scaleY: number, sourceWidth: number, sourceHeight: number }}
- */
+const preprocessBuffers = new Map()
+
 function createInputCanvas(inputSize) {
   if (typeof OffscreenCanvas !== 'undefined') {
     const canvas = new OffscreenCanvas(inputSize, inputSize)
@@ -24,6 +21,25 @@ function createInputCanvas(inputSize) {
   return { canvas, ctx }
 }
 
+function getPreprocessBuffer(inputSize) {
+  let buffer = preprocessBuffers.get(inputSize)
+  if (!buffer) {
+    const { canvas, ctx } = createInputCanvas(inputSize)
+    buffer = {
+      canvas,
+      ctx,
+      tensorData: new Float32Array(3 * inputSize * inputSize),
+    }
+    preprocessBuffers.set(inputSize, buffer)
+  }
+  return buffer
+}
+
+/**
+ * @param {HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap} source
+ * @param {number} [inputSize]
+ * @returns {{ tensorData: Float32Array, scaleX: number, scaleY: number, sourceWidth: number, sourceHeight: number }}
+ */
 export function preprocessFrame(source, inputSize) {
   const sourceWidth = source.videoWidth || source.width
   const sourceHeight = source.videoHeight || source.height
@@ -32,7 +48,7 @@ export function preprocessFrame(source, inputSize) {
     throw new Error('Frame source has no dimensions')
   }
 
-  const { canvas, ctx } = createInputCanvas(inputSize)
+  const { ctx, tensorData } = getPreprocessBuffer(inputSize)
   if (!ctx) {
     throw new Error('Canvas 2D context is unavailable')
   }
@@ -48,7 +64,6 @@ export function preprocessFrame(source, inputSize) {
   ctx.drawImage(source, 0, 0, sourceWidth, sourceHeight, padX, padY, drawWidth, drawHeight)
 
   const { data } = ctx.getImageData(0, 0, inputSize, inputSize)
-  const tensorData = new Float32Array(3 * inputSize * inputSize)
   const channelSize = inputSize * inputSize
 
   for (let i = 0; i < channelSize; i++) {

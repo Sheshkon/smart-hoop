@@ -174,6 +174,8 @@ const shotStatusLabel = computed(() => {
   return shotStateLabel.value
 })
 const RIM_VISUAL_PADDING_FACTOR = 0.18
+const FRAME_RENDER_INTERVAL_MS = 33
+let lastRenderAt = 0
 
 const loadingModelLabel = computed(() => {
   if (activeDetectorMode.value !== DETECTOR_MODES.AI) return ''
@@ -882,6 +884,12 @@ function renderSessionFrame(timestampMs) {
     return
   }
 
+  if (timestampMs - lastRenderAt < FRAME_RENDER_INTERVAL_MS) {
+    animationFrameId = requestAnimationFrame(renderSessionFrame)
+    return
+  }
+  lastRenderAt = timestampMs
+
   const rawResult = detector.detect({
     width: canvasWidth,
     height: canvasHeight,
@@ -950,6 +958,7 @@ function renderSessionFrame(timestampMs) {
 
 function startSessionLoop() {
   stopSessionLoop()
+  lastRenderAt = 0
   animationFrameId = requestAnimationFrame(renderSessionFrame)
 }
 

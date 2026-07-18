@@ -28,8 +28,9 @@ export function getPoseModelUrl(path = POSE_MODEL_RELATIVE) {
 /** @deprecated Use getPoseModelUrl() — kept for settings migration */
 export const POSE_MODEL_URL = getPoseModelUrl()
 
-const MEDIAPIPE_VISION_VERSION = '0.10.35'
-const WASM_CDN = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VISION_VERSION}/wasm`
+function getMediaPipeWasmBaseUrl() {
+  return `${import.meta.env.BASE_URL || '/'}models/mediapipe/wasm`
+}
 
 const LANDMARK_NAMES = [
   'nose',
@@ -108,7 +109,7 @@ export function createMediaPipePoseDetector(options = {}) {
   }
 
   async function createLandmarker(delegate, resolvedModelUrl) {
-    const vision = await FilesetResolver.forVisionTasks(WASM_CDN)
+    const vision = await FilesetResolver.forVisionTasks(getMediaPipeWasmBaseUrl())
     return PoseLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath: resolvedModelUrl,

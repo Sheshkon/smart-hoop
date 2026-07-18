@@ -1,31 +1,23 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
-import SessionView from '../views/SessionView.vue'
-import AiWorkspaceView from '../views/AiWorkspaceView.vue'
-import AiSessionPanel from '../views/AiSessionPanel.vue'
-import AiTestPanel from '../views/AiTestPanel.vue'
-import AiShotTestPanel from '../views/AiShotTestPanel.vue'
-import StatsView from '../views/StatsView.vue'
-import SettingsView from '../views/SettingsView.vue'
 import { useActiveSession } from '../stores/activeSession.js'
 
 const routes = [
-  { path: '/', name: 'home', component: HomeView },
-  { path: '/session/manual', name: 'session-manual', component: SessionView },
+  { path: '/', name: 'home', component: () => import('../views/HomeView.vue') },
+  { path: '/session/manual', name: 'session-manual', component: () => import('../views/SessionView.vue') },
   { path: '/session/ai', redirect: '/ai/session' },
   {
     path: '/ai',
-    component: AiWorkspaceView,
+    component: () => import('../views/AiWorkspaceView.vue'),
     redirect: '/ai/session',
     children: [
-      { path: 'session', name: 'session-ai', component: AiSessionPanel },
-      { path: 'test', name: 'ai-test', component: AiTestPanel },
-      { path: 'shot-test', name: 'ai-shot-test', component: AiShotTestPanel },
+      { path: 'session', name: 'session-ai', component: () => import('../views/AiSessionPanel.vue') },
+      { path: 'test', name: 'ai-test', component: () => import('../views/AiTestPanel.vue') },
+      { path: 'shot-test', name: 'ai-shot-test', component: () => import('../views/AiShotTestPanel.vue') },
     ],
   },
   { path: '/session', redirect: '/' },
-  { path: '/stats', name: 'stats', component: StatsView },
-  { path: '/settings', name: 'settings', component: SettingsView },
+  { path: '/stats', name: 'stats', component: () => import('../views/StatsView.vue') },
+  { path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
 ]
 
 const router = createRouter({

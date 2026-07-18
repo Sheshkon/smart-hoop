@@ -59,7 +59,7 @@ export const AI_DETECTOR_MODELS = [
   createBasketballYolo26Model(352),
 ]
 
-export const DEFAULT_AI_MODEL_ID = 'basketball-yolo26-640'
+export const DEFAULT_AI_MODEL_ID = 'basketball-yolo26-480'
 
 /**
  * @param {string} [id]
