@@ -313,7 +313,15 @@ export function createShotStateMachine(options = {}) {
     lastBallCenter = { ...ballCenter }
     lastHoopBox = { ...hoopBox }
 
-    if (trackId != null && lastTrackId != null && trackId !== lastTrackId && state !== SHOT_STATES.idle) {
+    const resolvingRimPass =
+      state === SHOT_STATES.rimInteractionPending || state === SHOT_STATES.passingThroughNet
+    if (
+      trackId != null &&
+      lastTrackId != null &&
+      trackId !== lastTrackId &&
+      state !== SHOT_STATES.idle &&
+      !resolvingRimPass
+    ) {
       return finishAttempt('unknown', timestampMs, {
         reason: 'track_changed',
         evidence: { hoopStable, lastPointMeasured: Boolean(ballMeasured) },

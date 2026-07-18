@@ -55,24 +55,41 @@
           Минимальная уверенность модели для каждого класса. Применяется сразу, без перезагрузки модели.
         </p>
 
-        <label
+        <div
           v-for="cls in detectorClasses"
           :key="cls.index"
-          class="form-field settings-fps-field"
+          class="settings-class-control"
         >
-          <span class="form-field__label">
-            {{ cls.label }} ({{ cls.roleLabel }}): {{ formatThreshold(aiModelSettings.classConfThresholds[cls.index]) }}
-          </span>
-          <input
-            :value="aiModelSettings.classConfThresholds[cls.index]"
-            type="range"
-            class="settings-fps-field__range"
-            :min="CONF_THRESHOLD_MIN"
-            :max="CONF_THRESHOLD_MAX"
-            :step="CONF_THRESHOLD_STEP"
-            @input="setClassConfThreshold(cls.index, Number($event.target.value))"
-          >
-        </label>
+          <label class="settings-class-toggle">
+            <input
+              :checked="aiModelSettings.classEnabled[cls.index] !== false"
+              type="checkbox"
+              class="settings-class-toggle__input"
+              @change="setClassEnabled(cls.index, $event.target.checked)"
+            >
+            <span class="settings-class-toggle__slider" aria-hidden="true" />
+            <span class="settings-class-toggle__text">
+              <span class="settings-class-toggle__label">{{ cls.label }}</span>
+              <span class="settings-class-toggle__meta">{{ cls.roleLabel }}</span>
+            </span>
+          </label>
+
+          <label class="form-field settings-fps-field">
+            <span class="form-field__label">
+              Порог: {{ formatThreshold(aiModelSettings.classConfThresholds[cls.index]) }}
+            </span>
+            <input
+              :value="aiModelSettings.classConfThresholds[cls.index]"
+              type="range"
+              class="settings-fps-field__range"
+              :disabled="aiModelSettings.classEnabled[cls.index] === false"
+              :min="CONF_THRESHOLD_MIN"
+              :max="CONF_THRESHOLD_MAX"
+              :step="CONF_THRESHOLD_STEP"
+              @input="setClassConfThreshold(cls.index, Number($event.target.value))"
+            >
+          </label>
+        </div>
 
       </section>
 
@@ -156,6 +173,7 @@ import { POSE_MODES } from '../ai/poseDetectorFactory.js'
 import {
   aiModelSettings,
   resetAiDetectorSettings,
+  setClassEnabled,
   setAiDetectorModel,
   setClassConfThreshold,
 } from '../stores/aiModelSettings.js'

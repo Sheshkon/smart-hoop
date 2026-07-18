@@ -81,6 +81,20 @@ test('does not timeout while the ball is visible before a shot starts', () => {
   assert.equal(result.reason, 'confirmed_net_pass')
 })
 
+test('keeps resolving a rim pass when the ball track changes after entry', () => {
+  const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
+
+  update(machine, { x: 140, y: 50 }, 0, { trackId: 1 })
+  update(machine, { x: 140, y: 75 }, 40, { trackId: 1 })
+  update(machine, { x: 140, y: 90 }, 80, { trackId: 1 })
+  update(machine, { x: 140, y: 100 }, 120, { trackId: 1 })
+  update(machine, { x: 140, y: 116 }, 160, { trackId: 2 })
+  const result = update(machine, { x: 140, y: 140 }, 200, { trackId: 2 })
+
+  assert.equal(result.event, 'make')
+  assert.equal(result.reason, 'confirmed_net_pass')
+})
+
 test('counts make from trajectory history when current ball is not visible', () => {
   const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
 

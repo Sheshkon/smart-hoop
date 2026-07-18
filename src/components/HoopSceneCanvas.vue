@@ -1054,8 +1054,11 @@ watch(
 )
 
 watch(
-  () => [...aiModelSettings.classConfThresholds],
-  (thresholds) => {
+  () => ({
+    thresholds: [...aiModelSettings.classConfThresholds],
+    enabled: [...aiModelSettings.classEnabled],
+  }),
+  ({ thresholds, enabled }) => {
     if (
       props.mode !== 'session' ||
       activeDetectorMode.value !== DETECTOR_MODES.AI ||
@@ -1065,7 +1068,7 @@ watch(
       return
     }
 
-    detector.updateThresholds(thresholds)
+    detector.updateThresholds(thresholds, enabled)
   },
 )
 

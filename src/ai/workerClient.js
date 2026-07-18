@@ -65,9 +65,10 @@ export function createDetectorWorkerClient(options = {}) {
    * @param {string} modelUrl
    * @param {number} inputSize
    * @param {number[]} [classConfThresholds]
+   * @param {boolean[]} [classEnabled]
    * @param {Array<object>} [classes]
    */
-  async function init(modelUrl, inputSize, classConfThresholds, classes) {
+  async function init(modelUrl, inputSize, classConfThresholds, classEnabled, classes) {
     dispose()
 
     disposed = false
@@ -87,16 +88,17 @@ export function createDetectorWorkerClient(options = {}) {
       initReject = reject
     })
 
-    worker.postMessage({ type: 'init', modelUrl, inputSize, classConfThresholds, classes })
+    worker.postMessage({ type: 'init', modelUrl, inputSize, classConfThresholds, classEnabled, classes })
     await initPromise
   }
 
   /**
    * @param {number[]} classConfThresholds
+   * @param {boolean[]} [classEnabled]
    */
-  function setThresholds(classConfThresholds) {
+  function setThresholds(classConfThresholds, classEnabled) {
     if (!worker || !ready) return
-    worker.postMessage({ type: 'set-thresholds', classConfThresholds })
+    worker.postMessage({ type: 'set-thresholds', classConfThresholds, classEnabled })
   }
 
   function isSourceReady(source) {

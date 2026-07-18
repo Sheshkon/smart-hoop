@@ -3,6 +3,8 @@ import './ortSetup.js'
 import {
   DEFAULT_CLASS_CONF_THRESHOLDS,
   DETECTOR_CLASSES,
+  DEFAULT_CLASS_ENABLED,
+  normalizeClassEnabled,
   normalizeClassConfThresholds,
 } from './detectorModels.js'
 import {
@@ -19,6 +21,8 @@ let inputSize = 416
 let inferInFlight = false
 /** @type {number[]} */
 let classConfThresholds = [...DEFAULT_CLASS_CONF_THRESHOLDS]
+/** @type {boolean[]} */
+let classEnabled = [...DEFAULT_CLASS_ENABLED]
 /** @type {import('./detectorModels.js').DetectorClassMeta[]} */
 let detectorClasses = DETECTOR_CLASSES
 
@@ -44,12 +48,13 @@ async function createInferenceSession(modelUrl) {
   })
 }
 
-async function handleInit(modelUrl, size, thresholds, classes) {
+async function handleInit(modelUrl, size, thresholds, enabled, classes) {
   inputSize = size
   detectorClasses = classes?.length ? classes : DETECTOR_CLASSES
   if (thresholds) {
     classConfThresholds = normalizeClassConfThresholds(thresholds, detectorClasses)
   }
+  classEnabled = normalizeClassEnabled(enabled, detectorClasses)
   session = await createInferenceSession(modelUrl)
   inputName = session.inputNames[0] ?? 'images'
   outputName = session.outputNames[0] ?? 'output0'
@@ -83,6 +88,7 @@ async function handleDetect(data) {
     const output = outputs[outputName]
     const rawDetections = postprocessYoloOutput(output, {
       classConfThresholds,
+      classEnabled,
       classes: detectorClasses,
     })
     const detections = rawDetections.map((item) =>
@@ -116,6 +122,7 @@ self.onmessage = async (event) => {
         event.data.modelUrl,
         event.data.inputSize,
         event.data.classConfThresholds,
+        event.data.classEnabled,
         event.data.classes,
       )
     } catch (err) {
@@ -130,6 +137,7 @@ self.onmessage = async (event) => {
       event.data.classConfThresholds,
       detectorClasses,
     )
+    classEnabled = normalizeClassEnabled(event.data.classEnabled, detectorClasses)
     return
   }
 

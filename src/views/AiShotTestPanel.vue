@@ -344,6 +344,29 @@ function drawCoverVideo(ctx, video, width, height) {
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height)
 }
 
+function drawOverlay(ctx, overlayCanvas, width, height) {
+  const overlayRatio = overlayCanvas.width / overlayCanvas.height
+  const canvasRatio = width / height
+  let sx = 0
+  let sy = 0
+  let sw = overlayCanvas.width
+  let sh = overlayCanvas.height
+
+  if (overlayRatio > canvasRatio) {
+    sw = overlayCanvas.height * canvasRatio
+    sx = (overlayCanvas.width - sw) / 2
+  } else {
+    sh = overlayCanvas.width / canvasRatio
+    sy = (overlayCanvas.height - sh) / 2
+  }
+
+  ctx.drawImage(overlayCanvas, sx, sy, sw, sh, 0, 0, width, height)
+}
+
+function getRecordingBitsPerSecond(width, height) {
+  return Math.round(Math.max(8_000_000, Math.min(28_000_000, width * height * 6)))
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -371,8 +394,8 @@ async function downloadResultVideo() {
   const wasPaused = video.paused
   const previousTime = video.currentTime
   const exportCanvas = document.createElement('canvas')
-  exportCanvas.width = overlayCanvas.width
-  exportCanvas.height = overlayCanvas.height
+  exportCanvas.width = video.videoWidth
+  exportCanvas.height = video.videoHeight
   const ctx = exportCanvas.getContext('2d')
 
   if (!ctx) {
@@ -384,13 +407,16 @@ async function downloadResultVideo() {
   const chunks = []
   const mimeType = getSupportedRecordingType()
   const stream = exportCanvas.captureStream(30)
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+  const recorder = new MediaRecorder(stream, {
+    ...(mimeType ? { mimeType } : {}),
+    videoBitsPerSecond: getRecordingBitsPerSecond(exportCanvas.width, exportCanvas.height),
+  })
   let frameId = null
 
   const drawFrame = () => {
     ctx.clearRect(0, 0, exportCanvas.width, exportCanvas.height)
     drawCoverVideo(ctx, video, exportCanvas.width, exportCanvas.height)
-    ctx.drawImage(overlayCanvas, 0, 0, exportCanvas.width, exportCanvas.height)
+    drawOverlay(ctx, overlayCanvas, exportCanvas.width, exportCanvas.height)
     frameId = requestAnimationFrame(drawFrame)
   }
 

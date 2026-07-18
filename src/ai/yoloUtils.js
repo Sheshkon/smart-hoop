@@ -1,6 +1,7 @@
 import {
   DEFAULT_CLASS_CONF_THRESHOLDS,
   DETECTOR_CLASSES,
+  normalizeClassEnabled,
   normalizeClassConfThresholds,
 } from './detectorModels.js'
 
@@ -148,7 +149,7 @@ export function nonMaxSuppression(boxes, iouThreshold = 0.45) {
 
 /**
  * @param {import('onnxruntime-web').Tensor} output
- * @param {{ confThreshold?: number, iouThreshold?: number, classConfThresholds?: number[], classes?: import('./detectorModels.js').DetectorClassMeta[] }} [options]
+ * @param {{ confThreshold?: number, iouThreshold?: number, classConfThresholds?: number[], classEnabled?: boolean[], classes?: import('./detectorModels.js').DetectorClassMeta[] }} [options]
  */
 export function postprocessYoloOutput(output, options = {}) {
   const confThreshold = options.confThreshold ?? 0.25
@@ -158,6 +159,7 @@ export function postprocessYoloOutput(output, options = {}) {
     options.classConfThresholds ?? DEFAULT_CLASS_CONF_THRESHOLDS,
     classes,
   )
+  const classEnabled = normalizeClassEnabled(options.classEnabled, classes)
 
   const [, dim1, dim2] = output.dims
   const data = output.data
@@ -170,6 +172,7 @@ export function postprocessYoloOutput(output, options = {}) {
       const confidence = data[offset + 4]
       const classIndex = Math.trunc(data[offset + 5])
 
+      if (classEnabled[classIndex] === false) continue
       if (confidence < (classConfThresholds[classIndex] ?? confThreshold)) continue
 
       const x1 = data[offset]
@@ -213,6 +216,7 @@ export function postprocessYoloOutput(output, options = {}) {
     }
 
     if (bestScore < (classConfThresholds[bestClass] ?? confThreshold)) continue
+    if (classEnabled[bestClass] === false) continue
 
     const cx = data[i]
     const cy = data[numBoxes + i]

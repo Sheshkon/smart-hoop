@@ -68,8 +68,9 @@ export const BASKETBALL_NANO_DETECTOR_CLASSES = [
 export const DETECTOR_CLASSES = BASKETBALL_NANO_DETECTOR_CLASSES
 
 export const DEFAULT_CLASS_CONF_THRESHOLDS = [0.15, 0.15, 0.15, 0.15, 0.15]
+export const DEFAULT_CLASS_ENABLED = [true, true, true, true, true]
 
-export const AI_MODEL_SETTINGS_VERSION = 8
+export const AI_MODEL_SETTINGS_VERSION = 9
 
 export const CONF_THRESHOLD_MIN = 0.05
 export const CONF_THRESHOLD_MAX = 0.95
@@ -171,4 +172,12 @@ export function normalizeClassConfThresholds(thresholds, classes = DETECTOR_CLAS
   return classes.map((_, index) =>
     clampClassConfThreshold(index, thresholds?.[index] ?? DEFAULT_CLASS_CONF_THRESHOLDS[index]),
   )
+}
+
+/**
+ * @param {boolean[] | undefined} enabled
+ * @param {DetectorClassMeta[]} [classes]
+ */
+export function normalizeClassEnabled(enabled, classes = DETECTOR_CLASSES) {
+  return classes.map((_, index) => enabled?.[index] !== false)
 }

@@ -3,9 +3,11 @@ import {
   AI_DETECTOR_MODELS,
   AI_MODEL_SETTINGS_VERSION,
   clampClassConfThreshold,
+  DEFAULT_CLASS_ENABLED,
   DEFAULT_AI_MODEL_ID,
   DEFAULT_CLASS_CONF_THRESHOLDS,
   getAiDetectorModel,
+  normalizeClassEnabled,
   normalizeClassConfThresholds,
 } from '../ai/detectorModels.js'
 
@@ -15,6 +17,7 @@ const LEGACY_STORAGE_KEY = 'smart-hoop.ai-model'
 export const aiModelSettings = reactive({
   modelId: DEFAULT_AI_MODEL_ID,
   classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
+  classEnabled: [...DEFAULT_CLASS_ENABLED],
 })
 
 function loadSettings() {
@@ -36,6 +39,7 @@ function loadSettings() {
         classConfThresholds: useDefaultThresholds
           ? [...DEFAULT_CLASS_CONF_THRESHOLDS]
           : normalizeClassConfThresholds(parsed.classConfThresholds),
+        classEnabled: normalizeClassEnabled(parsed.classEnabled),
       }
     }
   } catch {
@@ -48,6 +52,7 @@ function loadSettings() {
       return {
         modelId: legacyModelId,
         classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
+        classEnabled: [...DEFAULT_CLASS_ENABLED],
       }
     }
   } catch {
@@ -57,6 +62,7 @@ function loadSettings() {
   return {
     modelId: DEFAULT_AI_MODEL_ID,
     classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
+    classEnabled: [...DEFAULT_CLASS_ENABLED],
   }
 }
 
@@ -68,6 +74,7 @@ function saveSettings() {
         settingsVersion: AI_MODEL_SETTINGS_VERSION,
         modelId: aiModelSettings.modelId,
         classConfThresholds: [...aiModelSettings.classConfThresholds],
+        classEnabled: [...aiModelSettings.classEnabled],
       }),
     )
     localStorage.removeItem(LEGACY_STORAGE_KEY)
@@ -80,6 +87,7 @@ export function initAiModelSettings() {
   const settings = loadSettings()
   aiModelSettings.modelId = settings.modelId
   aiModelSettings.classConfThresholds = settings.classConfThresholds
+  aiModelSettings.classEnabled = settings.classEnabled
   saveSettings()
 }
 
@@ -107,9 +115,21 @@ export function resetClassConfThresholds() {
   saveSettings()
 }
 
+/**
+ * @param {number} index
+ * @param {boolean} enabled
+ */
+export function setClassEnabled(index, enabled) {
+  if (index < 0 || index >= aiModelSettings.classEnabled.length) return
+
+  aiModelSettings.classEnabled[index] = Boolean(enabled)
+  saveSettings()
+}
+
 export function resetAiDetectorSettings() {
   aiModelSettings.modelId = DEFAULT_AI_MODEL_ID
   aiModelSettings.classConfThresholds = [...DEFAULT_CLASS_CONF_THRESHOLDS]
+  aiModelSettings.classEnabled = [...DEFAULT_CLASS_ENABLED]
   saveSettings()
 }
 
@@ -120,6 +140,13 @@ export function getSelectedAiDetectorModel() {
 export function getSelectedClassConfThresholds() {
   return normalizeClassConfThresholds(
     aiModelSettings.classConfThresholds,
+    getSelectedAiDetectorModel().classes,
+  )
+}
+
+export function getSelectedClassEnabled() {
+  return normalizeClassEnabled(
+    aiModelSettings.classEnabled,
     getSelectedAiDetectorModel().classes,
   )
 }
