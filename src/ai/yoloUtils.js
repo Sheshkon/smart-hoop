@@ -159,11 +159,46 @@ export function postprocessYoloOutput(output, options = {}) {
     classes,
   )
 
-  const [, numChannels, numBoxes] = output.dims
-  const numClasses = numChannels - 4
+  const [, dim1, dim2] = output.dims
   const data = output.data
 
   const candidates = []
+
+  if (dim2 === 6) {
+    for (let i = 0; i < dim1; i++) {
+      const offset = i * 6
+      const confidence = data[offset + 4]
+      const classIndex = Math.trunc(data[offset + 5])
+
+      if (confidence < (classConfThresholds[classIndex] ?? confThreshold)) continue
+
+      const x1 = data[offset]
+      const y1 = data[offset + 1]
+      const x2 = data[offset + 2]
+      const y2 = data[offset + 3]
+      const width = x2 - x1
+      const height = y2 - y1
+
+      if (width <= 0 || height <= 0) continue
+
+      candidates.push({
+        classIndex,
+        confidence,
+        box: {
+          x: x1,
+          y: y1,
+          width,
+          height,
+        },
+      })
+    }
+
+    return nonMaxSuppression(candidates, iouThreshold)
+  }
+
+  const numChannels = dim1
+  const numBoxes = dim2
+  const numClasses = numChannels - 4
 
   for (let i = 0; i < numBoxes; i++) {
     let bestClass = 0
