@@ -2,46 +2,7 @@
 /** @typedef {{ id: string, label: string, description: string, fileName: string, inputSize: number, classes: DetectorClassMeta[] }} AiDetectorModel */
 
 /** @type {DetectorClassMeta[]} */
-export const EVENT_NANO_DETECTOR_CLASSES = [
-  {
-    index: 0,
-    className: 'ball',
-    label: 'Мяч',
-    roleLabel: 'Мяч для игровой логики',
-    appClass: 'ball',
-  },
-  {
-    index: 1,
-    className: 'make',
-    label: 'Попадание',
-    roleLabel: 'Событие модели',
-    appClass: null,
-  },
-  {
-    index: 2,
-    className: 'player',
-    label: 'Игрок',
-    roleLabel: 'Игрок для игровой логики',
-    appClass: 'person',
-  },
-  {
-    index: 3,
-    className: 'hoop',
-    label: 'Кольцо',
-    roleLabel: 'Кольцо для игровой логики',
-    appClass: 'hoop',
-  },
-  {
-    index: 4,
-    className: 'shot',
-    label: 'Бросок',
-    roleLabel: 'Событие модели',
-    appClass: null,
-  },
-]
-
-/** @type {DetectorClassMeta[]} */
-export const BASKETBALL_NANO_DETECTOR_CLASSES = [
+export const BASKETBALL_DETECTOR_CLASSES = [
   {
     index: 0,
     className: 'ball',
@@ -65,31 +26,16 @@ export const BASKETBALL_NANO_DETECTOR_CLASSES = [
   },
 ]
 
-export const DETECTOR_CLASSES = BASKETBALL_NANO_DETECTOR_CLASSES
+export const DETECTOR_CLASSES = BASKETBALL_DETECTOR_CLASSES
 
-export const DEFAULT_CLASS_CONF_THRESHOLDS = [0.15, 0.15, 0.15, 0.15, 0.15]
-export const DEFAULT_CLASS_ENABLED = [true, true, true, true, true]
+export const DEFAULT_CLASS_CONF_THRESHOLDS = [0.15, 0.15, 0.15]
+export const DEFAULT_CLASS_ENABLED = [true, true, true]
 
 export const AI_MODEL_SETTINGS_VERSION = 9
 
 export const CONF_THRESHOLD_MIN = 0.05
 export const CONF_THRESHOLD_MAX = 0.95
 export const CONF_THRESHOLD_STEP = 0.05
-
-/**
- * @param {number} size
- * @returns {AiDetectorModel}
- */
-function createBasketballNanoModel(size) {
-  return {
-    id: `basketball-nano-${size}`,
-    label: `Basketball Nano (${size})`,
-    description: 'Классы: мяч, игрок, кольцо',
-    fileName: `nano/basketball_nano_${size}.onnx`,
-    inputSize: size,
-    classes: BASKETBALL_NANO_DETECTOR_CLASSES,
-  }
-}
 
 /**
  * @param {number} size
@@ -102,22 +48,7 @@ function createBasketballYolo26Model(size) {
     description: 'Классы: мяч, игрок, кольцо',
     fileName: `nano/basketball_yolo26_${size}.onnx`,
     inputSize: size,
-    classes: BASKETBALL_NANO_DETECTOR_CLASSES,
-  }
-}
-
-/**
- * @param {number} size
- * @returns {AiDetectorModel}
- */
-function createEventNanoModel(size) {
-  return {
-    id: `event-nano-${size}`,
-    label: `Event Nano (${size})`,
-    description: 'Классы: мяч, попадание, игрок, кольцо, бросок',
-    fileName: `nano/best_${size}.onnx`,
-    inputSize: size,
-    classes: EVENT_NANO_DETECTOR_CLASSES,
+    classes: BASKETBALL_DETECTOR_CLASSES,
   }
 }
 
@@ -126,12 +57,6 @@ export const AI_DETECTOR_MODELS = [
   createBasketballYolo26Model(640),
   createBasketballYolo26Model(480),
   createBasketballYolo26Model(352),
-  createBasketballNanoModel(640),
-  createBasketballNanoModel(480),
-  createBasketballNanoModel(352),
-  createEventNanoModel(640),
-  createEventNanoModel(480),
-  createEventNanoModel(320),
 ]
 
 export const DEFAULT_AI_MODEL_ID = 'basketball-yolo26-640'

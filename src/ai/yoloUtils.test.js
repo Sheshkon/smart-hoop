@@ -2,34 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { postprocessYoloOutput } from './yoloUtils.js'
 
-test('postprocesses channel-first YOLO output', () => {
-  const detections = postprocessYoloOutput({
-    dims: [1, 7, 2],
-    data: new Float32Array([
-      20, 50,
-      30, 50,
-      10, 10,
-      12, 10,
-      0.1, 0.1,
-      0.9, 0.1,
-      0.2, 0.1,
-    ]),
-  })
-
-  assert.deepEqual(detections, [
-    {
-      classIndex: 1,
-      confidence: Math.fround(0.9),
-      box: {
-        x: 15,
-        y: 24,
-        width: 10,
-        height: 12,
-      },
-    },
-  ])
-})
-
 test('postprocesses NMS YOLO output rows', () => {
   const detections = postprocessYoloOutput({
     dims: [1, 3, 6],
@@ -52,6 +24,17 @@ test('postprocesses NMS YOLO output rows', () => {
       },
     },
   ])
+})
+
+test('rejects unsupported YOLO output shapes', () => {
+  assert.throws(
+    () =>
+      postprocessYoloOutput({
+        dims: [1, 7, 2],
+        data: new Float32Array(14),
+      }),
+    /Unsupported YOLO output shape: 1x7x2/,
+  )
 })
 
 test('skips disabled classes', () => {

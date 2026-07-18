@@ -166,69 +166,33 @@ export function postprocessYoloOutput(output, options = {}) {
 
   const candidates = []
 
-  if (dim2 === 6) {
-    for (let i = 0; i < dim1; i++) {
-      const offset = i * 6
-      const confidence = data[offset + 4]
-      const classIndex = Math.trunc(data[offset + 5])
-
-      if (classEnabled[classIndex] === false) continue
-      if (confidence < (classConfThresholds[classIndex] ?? confThreshold)) continue
-
-      const x1 = data[offset]
-      const y1 = data[offset + 1]
-      const x2 = data[offset + 2]
-      const y2 = data[offset + 3]
-      const width = x2 - x1
-      const height = y2 - y1
-
-      if (width <= 0 || height <= 0) continue
-
-      candidates.push({
-        classIndex,
-        confidence,
-        box: {
-          x: x1,
-          y: y1,
-          width,
-          height,
-        },
-      })
-    }
-
-    return nonMaxSuppression(candidates, iouThreshold)
+  if (dim2 !== 6) {
+    throw new Error(`Unsupported YOLO output shape: ${output.dims.join('x')}`)
   }
 
-  const numChannels = dim1
-  const numBoxes = dim2
-  const numClasses = numChannels - 4
+  for (let i = 0; i < dim1; i++) {
+    const offset = i * 6
+    const confidence = data[offset + 4]
+    const classIndex = Math.trunc(data[offset + 5])
 
-  for (let i = 0; i < numBoxes; i++) {
-    let bestClass = 0
-    let bestScore = 0
+    if (classEnabled[classIndex] === false) continue
+    if (confidence < (classConfThresholds[classIndex] ?? confThreshold)) continue
 
-    for (let classIndex = 0; classIndex < numClasses; classIndex++) {
-      const score = data[(4 + classIndex) * numBoxes + i]
-      if (score > bestScore) {
-        bestScore = score
-        bestClass = classIndex
-      }
-    }
+    const x1 = data[offset]
+    const y1 = data[offset + 1]
+    const x2 = data[offset + 2]
+    const y2 = data[offset + 3]
+    const width = x2 - x1
+    const height = y2 - y1
 
-    if (bestScore < (classConfThresholds[bestClass] ?? confThreshold)) continue
-    if (classEnabled[bestClass] === false) continue
-
-    const cx = data[i]
-    const cy = data[numBoxes + i]
-    const width = data[2 * numBoxes + i]
-    const height = data[3 * numBoxes + i]
+    if (width <= 0 || height <= 0) continue
 
     candidates.push({
-      classIndex: bestClass,
-      confidence: bestScore,
+      classIndex,
+      confidence,
       box: {
-        x: cx - width / 2,
-        y: cy - height / 2,
+        x: x1,
+        y: y1,
         width,
         height,
       },
