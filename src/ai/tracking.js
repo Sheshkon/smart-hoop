@@ -3,16 +3,16 @@ import { boxIoU } from './yoloUtils.js'
 
 const BALL_CONFIDENCE_MIN = 0.15
 const BALL_CONFIDENCE_TRACKING_MIN = 0.08
-const BALL_TRACK_RADIUS_PX = 120
-const BALL_COAST_MAX_MS = 520
+const BALL_TRACK_RADIUS_PX = 180
+const BALL_COAST_MAX_MS = 650
 const BALL_TRAJECTORY_TTL_MS = 1400
 const BALL_REACQUIRE_MIN_CONFIDENCE = 0.28
-const BALL_MAX_SPEED_PX_PER_SEC = 2600
-const BALL_JUMP_PADDING_PX = 52
+const BALL_MAX_SPEED_PX_PER_SEC = 4200
+const BALL_JUMP_PADDING_PX = 72
 const BALL_MIN_JUMP_GATE_PX = 110
-const BALL_MAX_JUMP_GATE_PX = 260
-const BALL_HISTORY_BREAK_DISTANCE_PX = 170
-const BALL_HISTORY_BREAK_MS = 220
+const BALL_MAX_JUMP_GATE_PX = 380
+const BALL_HISTORY_BREAK_DISTANCE_PX = 320
+const BALL_HISTORY_BREAK_MS = 300
 const PERSON_CONFIDENCE_MIN = 0.3
 const HOOP_TRACK_RADIUS_PX = 200
 const HOOP_LOST_FRAME_THRESHOLD = 18
@@ -553,7 +553,7 @@ export function createTracker() {
       : null
     const hoopStability = getHoopStability(hoopSourceHistory)
     const ballHistoryBreakDistancePx = displayHoopBox
-      ? Math.max(80, displayHoopBox.width * 2.2)
+      ? Math.max(BALL_HISTORY_BREAK_DISTANCE_PX, displayHoopBox.width * 4)
       : BALL_HISTORY_BREAK_DISTANCE_PX
 
     const predictedCenter = predictBallCenter(timestampMs)

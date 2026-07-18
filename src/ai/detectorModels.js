@@ -35,7 +35,7 @@ export const AI_MODEL_SETTINGS_VERSION = 9
 
 export const CONF_THRESHOLD_MIN = 0.05
 export const CONF_THRESHOLD_MAX = 0.95
-export const CONF_THRESHOLD_STEP = 0.05
+export const CONF_THRESHOLD_STEP = 0.01
 
 /**
  * @param {number} size

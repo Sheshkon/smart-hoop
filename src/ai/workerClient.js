@@ -1,4 +1,4 @@
-const DEFAULT_INFERENCE_INTERVAL_MS = 66
+const DEFAULT_INFERENCE_INTERVAL_MS = 40
 
 /**
  * @param {{ inferenceIntervalMs?: number }} [options]

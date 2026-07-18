@@ -418,6 +418,32 @@ export function createShotStateMachine(options = {}) {
         (wasAboveHoop &&
           (hasDownwardShotSegment(prevCenter, ballCenter, hoopBox) ||
             hasDownwardShotTrajectory(trajectoryPoints.slice(-4), hoopBox)))
+      const fastSegmentDecision = getFastSegmentDecision(
+        prevCenter,
+        ballCenter,
+        hoopBox,
+        ballRadius,
+        entryLooksLikeShot,
+      )
+
+      if (
+        fastSegmentDecision &&
+        hoopStable &&
+        ballMeasured &&
+        prevPointMeasured
+      ) {
+        if (fastSegmentDecision.rimEntry) rimEntry = fastSegmentDecision.rimEntry
+        return finishAttempt(fastSegmentDecision.event, timestampMs, {
+          reason: fastSegmentDecision.reason,
+          evidence: {
+            hoopStable,
+            lastPointMeasured: true,
+            usedTrajectoryForDecision: true,
+            entryCrossing: fastSegmentDecision.rimEntry,
+            trajectoryDecision: fastSegmentDecision.evidence,
+          },
+        })
+      }
 
       if (
         (state === SHOT_STATES.candidate || state === SHOT_STATES.armed) &&
@@ -713,12 +739,13 @@ function isPotentialAttemptStart(ballCenter, hoopBox, trajectoryPoints) {
 }
 
 function analyzeCompleteTrajectory(points, hoopBox, ballRadius, ballMeasured, prevPointMeasured) {
-  if (points.length < MIN_MEASURED_POINTS) return null
+  if (points.length < 2) return null
   if (!hasReliableTrajectoryForDecision(ballMeasured, prevPointMeasured, points)) return null
 
   const visualDecision = analyzeVisibleHoopPass(points, hoopBox, ballRadius)
   if (visualDecision) return visualDecision
 
+  if (points.length < MIN_MEASURED_POINTS) return null
   if (!trajectoryWasAboveHoop(points, hoopBox)) return null
   if (!trajectoryHasPassedHoopLevel(points, hoopBox, null)) return null
   if (!hasDownwardShotTrajectory(points.slice(-8), hoopBox)) return null
@@ -769,6 +796,39 @@ function analyzeCompleteTrajectory(points, hoopBox, ballRadius, ballMeasured, pr
   }
 
   return null
+}
+
+function getFastSegmentDecision(prevCenter, ballCenter, hoopBox, ballRadius, entryLooksLikeShot) {
+  if (!entryLooksLikeShot || !prevCenter) return null
+
+  const confirmationCrossing = getConfirmationCrossing(prevCenter, ballCenter, hoopBox, ballRadius)
+  if (confirmationCrossing?.direction !== 'down') return null
+
+  const entryCrossing =
+    getEntryCrossing(prevCenter, ballCenter, hoopBox, ballRadius) ??
+    getBallPlaneCrossing(prevCenter, ballCenter, hoopBox.y + hoopBox.height / 2, 0, 'center')
+  if (entryCrossing?.direction !== 'down') return null
+  if (!isNearHoop(entryCrossing, hoopBox)) return null
+
+  const insideEntry = isCrossingInsideInnerOpening(entryCrossing, hoopBox, ballRadius)
+  const insideConfirmation = isCrossingInsideExitOpening(
+    confirmationCrossing,
+    hoopBox,
+    ballRadius,
+  )
+
+  return {
+    event: insideEntry && insideConfirmation ? 'make' : 'miss',
+    reason: insideEntry && insideConfirmation ? 'fast_net_pass' : 'trajectory_passed_hoop_level',
+    rimEntry: {
+      x: entryCrossing.x,
+      y: entryCrossing.y,
+    },
+    evidence: {
+      fastSegment: true,
+      confirmationCrossing,
+    },
+  }
 }
 
 function analyzeVisibleHoopPass(points, hoopBox, ballRadius) {

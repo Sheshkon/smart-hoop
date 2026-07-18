@@ -64,6 +64,28 @@ test('counts make when rim entry is detected with short measured history', () =>
   assert.equal(result.reason, 'confirmed_net_pass')
 })
 
+test('counts make when fast ball crosses rim and net between sparse frames', () => {
+  const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
+
+  update(machine, { x: 140, y: 80 }, 0)
+  const result = update(machine, { x: 140, y: 150 }, 70)
+
+  assert.equal(result.event, 'make')
+  assert.equal(result.reason, 'fast_net_pass')
+  assert.equal(result.evidence.trajectoryDecision.fastSegment, true)
+})
+
+test('counts miss when fast ball crosses hoop level outside the rim', () => {
+  const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
+
+  update(machine, { x: 80, y: 80 }, 0)
+  const result = update(machine, { x: 80, y: 150 }, 70)
+
+  assert.equal(result.event, 'miss')
+  assert.equal(result.reason, 'trajectory_passed_hoop_level')
+  assert.equal(result.missType, 'left')
+})
+
 test('does not timeout while the ball is visible before a shot starts', () => {
   const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
 
