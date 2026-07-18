@@ -321,6 +321,11 @@ export function createShotStateMachine(options = {}) {
     }
 
     if (state === SHOT_STATES.idle) {
+      if (!isPotentialAttemptStart(ballCenter, hoopBox, trajectoryPoints)) {
+        lastPointMeasured = Boolean(ballMeasured)
+        return { state, event: null }
+      }
+
       if (trackId != null) lastTrackId = trackId
       startAttempt(timestampMs, trackId)
       state = SHOT_STATES.candidate
@@ -689,6 +694,14 @@ function normalizeTrajectoryPoint(point, timestampMs, framesBack) {
 
 function trajectoryWasAboveHoop(points, hoopBox) {
   return points.some((point) => isBallAboveHoop(point, hoopBox))
+}
+
+function isPotentialAttemptStart(ballCenter, hoopBox, trajectoryPoints) {
+  return (
+    isApproachingHoop(ballCenter, hoopBox) ||
+    isBallAboveHoop(ballCenter, hoopBox) ||
+    trajectoryWasAboveHoop(trajectoryPoints, hoopBox)
+  )
 }
 
 function analyzeCompleteTrajectory(points, hoopBox, ballRadius, ballMeasured, prevPointMeasured) {

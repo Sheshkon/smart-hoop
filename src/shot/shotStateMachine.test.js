@@ -64,6 +64,23 @@ test('counts make when rim entry is detected with short measured history', () =>
   assert.equal(result.reason, 'confirmed_net_pass')
 })
 
+test('does not timeout while the ball is visible before a shot starts', () => {
+  const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
+
+  update(machine, { x: 200, y: 500 }, 0)
+  update(machine, { x: 200, y: 500 }, 1000)
+  update(machine, { x: 200, y: 500 }, 2200)
+  update(machine, { x: 140, y: 50 }, 3000)
+  update(machine, { x: 140, y: 75 }, 3040)
+  update(machine, { x: 140, y: 90 }, 3080)
+  update(machine, { x: 140, y: 100 }, 3120)
+  update(machine, { x: 140, y: 116 }, 3160)
+  const result = update(machine, { x: 140, y: 140 }, 3200)
+
+  assert.equal(result.event, 'make')
+  assert.equal(result.reason, 'confirmed_net_pass')
+})
+
 test('counts make from trajectory history when current ball is not visible', () => {
   const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
 

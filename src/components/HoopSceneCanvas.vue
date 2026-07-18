@@ -898,6 +898,7 @@ function renderSessionFrame(timestampMs) {
 
   if (props.showDetectionBoxes) {
     const trackedResult = applyTracking(rawResult, timestampMs)
+    processShotDetection(trackedResult, timestampMs)
     runPoseDetection(timestampMs, trackedResult)
 
     emit('frame-result', {
@@ -1121,6 +1122,7 @@ onBeforeUnmount(() => {
 })
 
 defineExpose({
+  getOverlayCanvas: () => canvasRef.value,
   playTestMake: () => runTestTrajectory(TRAJECTORY_KEYS.make),
   playTestMissLeft: () => runTestTrajectory(TRAJECTORY_KEYS.missLeft),
   playTestMissRight: () => runTestTrajectory(TRAJECTORY_KEYS.missRight),

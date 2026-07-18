@@ -75,6 +75,16 @@
         <span v-if="lastShotLabel" class="ai-test-result__item">{{ lastShotLabel }}</span>
         <span v-if="trackingLabel" class="ai-test-result__item">{{ trackingLabel }}</span>
       </div>
+      <div class="ai-test-result__actions">
+        <button
+          type="button"
+          class="btn btn-secondary btn-small"
+          :disabled="exporting || detectorState !== 'ready'"
+          @click="downloadResultVideo"
+        >
+          {{ exporting ? 'Готовим видео…' : 'Скачать результат' }}
+        </button>
+      </div>
     </div>
 
     <p v-if="fileError" class="ai-test-panel__error" role="alert">
@@ -92,6 +102,7 @@ import { getSceneViewportForOrientation } from '../utils/sceneViewport.js'
 const fileInputRef = ref(null)
 const mediaFrameRef = ref(null)
 const videoRef = ref(null)
+const sceneRef = ref(null)
 const mediaUrl = ref('')
 const mediaName = ref('')
 const mediaElement = ref(null)
@@ -106,6 +117,7 @@ const misses = ref(0)
 const lastShotType = ref('')
 const ballVisible = ref(false)
 const hoopVisible = ref(false)
+const exporting = ref(false)
 let resizeObserver = null
 
 provide('cameraFullscreenRoot', mediaFrameRef)
@@ -179,6 +191,7 @@ function resetMedia() {
   fileError.value = ''
   ballVisible.value = false
   hoopVisible.value = false
+  exporting.value = false
   resetShotTest()
 }
 
@@ -293,6 +306,139 @@ function handleShotDetected({ type }) {
     makes.value += 1
   } else if (type === 'miss') {
     misses.value += 1
+  }
+}
+
+function getSupportedRecordingType() {
+  const types = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ]
+
+  return types.find((type) => MediaRecorder.isTypeSupported(type)) || ''
+}
+
+function waitForVideoEvent(video, eventName) {
+  return new Promise((resolve) => {
+    video.addEventListener(eventName, resolve, { once: true })
+  })
+}
+
+function drawCoverVideo(ctx, video, width, height) {
+  const videoRatio = video.videoWidth / video.videoHeight
+  const canvasRatio = width / height
+  let sx = 0
+  let sy = 0
+  let sw = video.videoWidth
+  let sh = video.videoHeight
+
+  if (videoRatio > canvasRatio) {
+    sw = video.videoHeight * canvasRatio
+    sx = (video.videoWidth - sw) / 2
+  } else {
+    sh = video.videoWidth / canvasRatio
+    sy = (video.videoHeight - sh) / 2
+  }
+
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height)
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+async function downloadResultVideo() {
+  const video = videoRef.value
+  const overlayCanvas = sceneRef.value?.getOverlayCanvas?.()
+
+  if (!video || !overlayCanvas) return
+  if (!('MediaRecorder' in window) || !HTMLCanvasElement.prototype.captureStream) {
+    fileError.value = 'Браузер не поддерживает запись результата.'
+    return
+  }
+
+  exporting.value = true
+  fileError.value = ''
+
+  const wasPaused = video.paused
+  const previousTime = video.currentTime
+  const exportCanvas = document.createElement('canvas')
+  exportCanvas.width = overlayCanvas.width
+  exportCanvas.height = overlayCanvas.height
+  const ctx = exportCanvas.getContext('2d')
+
+  if (!ctx) {
+    exporting.value = false
+    fileError.value = 'Не удалось подготовить canvas для записи.'
+    return
+  }
+
+  const chunks = []
+  const mimeType = getSupportedRecordingType()
+  const stream = exportCanvas.captureStream(30)
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+  let frameId = null
+
+  const drawFrame = () => {
+    ctx.clearRect(0, 0, exportCanvas.width, exportCanvas.height)
+    drawCoverVideo(ctx, video, exportCanvas.width, exportCanvas.height)
+    ctx.drawImage(overlayCanvas, 0, 0, exportCanvas.width, exportCanvas.height)
+    frameId = requestAnimationFrame(drawFrame)
+  }
+
+  try {
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data)
+    }
+
+    const stopped = new Promise((resolve) => {
+      recorder.onstop = resolve
+    })
+
+    resetShotTest()
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      await waitForVideoEvent(video, 'loadeddata')
+    }
+    if (Math.abs(video.currentTime) > 0.01) {
+      const seeked = waitForVideoEvent(video, 'seeked')
+      video.currentTime = 0
+      await seeked
+    } else {
+      video.currentTime = 0
+    }
+
+    drawFrame()
+    recorder.start(250)
+    await video.play()
+    await waitForVideoEvent(video, 'ended')
+    recorder.stop()
+    await stopped
+
+    downloadBlob(
+      new Blob(chunks, { type: mimeType || 'video/webm' }),
+      `${mediaName.value.replace(/\.[^.]+$/, '') || 'smart-hoop-result'}.webm`,
+    )
+  } catch (err) {
+    fileError.value = err instanceof Error ? err.message : 'Не удалось скачать результат.'
+    if (recorder.state !== 'inactive') recorder.stop()
+  } finally {
+    if (frameId != null) cancelAnimationFrame(frameId)
+    for (const track of stream.getTracks()) track.stop()
+    video.currentTime = previousTime
+    if (!wasPaused) {
+      video.play().catch(() => {})
+    } else {
+      video.pause()
+    }
+    exporting.value = false
   }
 }
 

@@ -754,6 +754,10 @@ body {
   font-weight: 700;
 }
 
+.ai-test-result__actions {
+  display: flex;
+}
+
 .media-test-view {
   position: relative;
   width: 100%;
