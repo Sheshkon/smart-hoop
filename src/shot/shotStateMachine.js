@@ -67,6 +67,7 @@ export function createShotStateMachine(options = {}) {
   let lastTrackId = null
   let attemptId = 0
   let resultSequence = 0
+  let lastResultAt = null
   let lastPointMeasured = false
   let wasAboveHoop = false
   let wasInApproachRange = false
@@ -97,6 +98,7 @@ export function createShotStateMachine(options = {}) {
     state = SHOT_STATES.idle
     cooldownUntil = 0
     lastTrackId = null
+    lastResultAt = null
     resetAttemptData()
   }
 
@@ -190,6 +192,7 @@ export function createShotStateMachine(options = {}) {
 
     state = SHOT_STATES.cooldown
     cooldownUntil = timestampMs + cooldownMs
+    lastResultAt = timestampMs
     resetAttemptData()
     return result
   }
@@ -207,14 +210,17 @@ export function createShotStateMachine(options = {}) {
     recentCenters = []
   }
 
-  function updateCooldown(ballCenter, hoopBox, timestampMs, trackId) {
+  function updateCooldown(ballCenter, hoopBox, timestampMs, trackId, latestTrajectoryAt) {
     if (state !== SHOT_STATES.cooldown) return false
 
     const trackChanged = trackId != null && lastTrackId != null && trackId !== lastTrackId
     const outsideGuard = ballCenter && hoopBox && isBallOutsideGuardZone(ballCenter, hoopBox)
     const ballGone = ballCenter == null
+    const hasFreshTrajectory = latestTrajectoryAt == null ||
+      lastResultAt == null ||
+      latestTrajectoryAt > lastResultAt
     const minElapsed = timestampMs >= cooldownUntil
-    const canRearm = minElapsed && (outsideGuard || trackChanged || ballGone)
+    const canRearm = minElapsed && hasFreshTrajectory && (outsideGuard || trackChanged || ballGone)
 
     if (canRearm) {
       state = SHOT_STATES.idle
@@ -268,8 +274,10 @@ export function createShotStateMachine(options = {}) {
   function update(input) {
     const { hoopBox, timestampMs } = input
     const trackId = input.trackId ?? null
-    const trajectoryPoints = getTrajectoryPoints(input, timestampMs)
+    const trajectorySets = getTrajectorySets(input, timestampMs)
+    const trajectoryPoints = trajectorySets[0]?.points ?? []
     const latestTrajectoryPoint = trajectoryPoints[trajectoryPoints.length - 1] ?? null
+    const latestTrajectoryAt = getLatestTrajectoryAt(trajectorySets)
     const ballCenter = input.ballCenter ?? latestTrajectoryPoint
     const ballRadius = Math.max(0, Number(input.ballRadius) || 0)
     lastBallRadius = ballRadius
@@ -281,7 +289,7 @@ export function createShotStateMachine(options = {}) {
         input.ballTrackState === 'tracked')
     const hoopStable = input.hoopStable !== false && input.hoopLost !== true
 
-    if (updateCooldown(ballCenter, hoopBox, timestampMs, trackId)) {
+    if (updateCooldown(ballCenter, hoopBox, timestampMs, trackId, latestTrajectoryAt)) {
       return { state, event: null }
     }
 
@@ -354,8 +362,8 @@ export function createShotStateMachine(options = {}) {
       touchedBackboardZone = true
     }
 
-    const trajectoryDecision = analyzeCompleteTrajectory(
-      trajectoryPoints,
+    const trajectoryDecision = analyzeCompleteTrajectories(
+      trajectorySets,
       hoopBox,
       ballRadius,
       ballMeasured,
@@ -370,6 +378,7 @@ export function createShotStateMachine(options = {}) {
           lastPointMeasured: Boolean(ballMeasured),
           usedTrajectoryForDecision: true,
           entryCrossing: trajectoryDecision.rimEntry,
+          trajectorySource: trajectoryDecision.source,
           trajectoryDecision: trajectoryDecision.evidence,
         },
       })
@@ -688,20 +697,31 @@ export function createShotStateMachine(options = {}) {
   return { update, reset, getState }
 }
 
-function getTrajectoryPoints(input, timestampMs) {
-  const source = Array.isArray(input.ballHistory) && input.ballHistory.length
-    ? input.ballHistory
-    : Array.isArray(input.rawBallHistory)
-      ? input.rawBallHistory
-      : []
+function getTrajectorySets(input, timestampMs) {
+  const sets = []
+  const smoothed = getTrajectoryPoints(input.ballHistory, input.ballCenter, timestampMs)
+  const raw = getTrajectoryPoints(input.rawBallHistory, input.ballCenter, timestampMs)
+
+  if (smoothed.length) sets.push({ source: 'smoothed', points: smoothed })
+  if (raw.length) sets.push({ source: 'raw', points: raw })
+  if (sets.length === 0) {
+    const current = normalizeTrajectoryPoint(input.ballCenter, timestampMs, 0)
+    if (current) sets.push({ source: 'current', points: [current] })
+  }
+
+  return sets
+}
+
+function getTrajectoryPoints(source, currentPoint, timestampMs) {
+  const history = Array.isArray(source) ? source : []
   const points = []
 
-  for (let index = 0; index < source.length; index += 1) {
-    const point = normalizeTrajectoryPoint(source[index], timestampMs, source.length - index)
+  for (let index = 0; index < history.length; index += 1) {
+    const point = normalizeTrajectoryPoint(history[index], timestampMs, history.length - index)
     if (point) points.push(point)
   }
 
-  const current = normalizeTrajectoryPoint(input.ballCenter, timestampMs, 0)
+  const current = normalizeTrajectoryPoint(currentPoint, timestampMs, 0)
   const last = points[points.length - 1]
   if (
     current &&
@@ -711,6 +731,17 @@ function getTrajectoryPoints(input, timestampMs) {
   }
 
   return points.slice(-12)
+}
+
+function getLatestTrajectoryAt(trajectorySets) {
+  let latest = null
+  for (const { points } of trajectorySets) {
+    for (const point of points) {
+      if (!Number.isFinite(point.t)) continue
+      latest = latest == null ? point.t : Math.max(latest, point.t)
+    }
+  }
+  return latest
 }
 
 function normalizeTrajectoryPoint(point, timestampMs, framesBack) {
@@ -738,12 +769,51 @@ function isPotentialAttemptStart(ballCenter, hoopBox, trajectoryPoints) {
   )
 }
 
+function analyzeCompleteTrajectories(trajectorySets, hoopBox, ballRadius, ballMeasured, prevPointMeasured) {
+  let missDecision = null
+
+  for (const { source, points } of trajectorySets) {
+    const decision = analyzeCompleteTrajectory(
+      points,
+      hoopBox,
+      ballRadius,
+      ballMeasured,
+      prevPointMeasured,
+    )
+    if (decision) {
+      const sourcedDecision = {
+        ...decision,
+        source,
+        evidence: {
+          ...decision.evidence,
+          trajectorySource: source,
+        },
+      }
+      if (decision.event === 'make') return sourcedDecision
+      missDecision ??= sourcedDecision
+    }
+  }
+
+  return missDecision
+}
+
 function analyzeCompleteTrajectory(points, hoopBox, ballRadius, ballMeasured, prevPointMeasured) {
   if (points.length < 2) return null
+
+  if (!ballMeasured && points.length < MIN_MEASURED_POINTS) {
+    const sweptDecision = analyzeSweptBallHoopPass(points, hoopBox, ballRadius)
+    if (sweptDecision) return sweptDecision
+  }
+
   if (!hasReliableTrajectoryForDecision(ballMeasured, prevPointMeasured, points)) return null
 
   const visualDecision = analyzeVisibleHoopPass(points, hoopBox, ballRadius)
   if (visualDecision) return visualDecision
+
+  if (!ballMeasured) {
+    const sweptDecision = analyzeSweptBallHoopPass(points, hoopBox, ballRadius)
+    if (sweptDecision) return sweptDecision
+  }
 
   if (points.length < MIN_MEASURED_POINTS) return null
   if (!trajectoryWasAboveHoop(points, hoopBox)) return null
@@ -790,6 +860,49 @@ function analyzeCompleteTrajectory(points, hoopBox, ballRadius, ballMeasured, pr
       evidence: {
         centering,
         entryTolerance: tolerance,
+        pointCount: points.length,
+      },
+    }
+  }
+
+  return null
+}
+
+function analyzeSweptBallHoopPass(points, hoopBox, ballRadius) {
+  const radius = Math.max(0, Number(ballRadius) || 0)
+  if (points.length < 2 || radius <= 0) return null
+
+  const rimPlaneY = hoopBox.y + hoopBox.height / 2
+  const hoopBottom = hoopBox.y + hoopBox.height
+  const startIndex = Math.max(1, points.length - 10)
+
+  for (let index = startIndex; index < points.length; index += 1) {
+    const prev = points[index - 1]
+    const current = points[index]
+    if (!hasDownwardShotSegment(prev, current, hoopBox)) continue
+    if (prev.y >= hoopBox.y || current.y + radius <= hoopBottom) continue
+
+    const crossing = getBallPlaneCrossing(prev, current, rimPlaneY, 0, 'center')
+    if (crossing?.direction !== 'down') continue
+
+    const overlap = getOpeningOverlapRatio(crossing.x, hoopBox, radius)
+    if (overlap <= 0) continue
+
+    const centering = clamp(1 - Math.abs(crossing.x - getHoopCenter(hoopBox).x) / Math.max(1, hoopBox.width / 2), 0, 1)
+    const enoughOverlapForMake = overlap >= 0.35
+
+    return {
+      event: enoughOverlapForMake ? 'make' : 'miss',
+      reason: enoughOverlapForMake ? 'swept_ball_net_pass' : 'trajectory_passed_hoop_level',
+      rimEntry: {
+        x: crossing.x,
+        y: crossing.y,
+      },
+      evidence: {
+        centering,
+        ballRadius: radius,
+        openingOverlapRatio: overlap,
+        sweptBall: true,
         pointCount: points.length,
       },
     }
@@ -1034,6 +1147,20 @@ function getIsSwish(point, hoopCenter, hoopBox, ballRadius) {
   const hoopRadius = hoopBox.width / 2
   const cleanRadius = Math.max(0, hoopRadius - Math.max(0, ballRadius))
   return distanceBetween(point, hoopCenter) < cleanRadius
+}
+
+function getOpeningOverlapRatio(centerX, hoopBox, ballRadius) {
+  const radius = Math.max(0, Number(ballRadius) || 0)
+  if (radius <= 0) {
+    return centerX >= hoopBox.x && centerX <= hoopBox.x + hoopBox.width ? 1 : 0
+  }
+
+  const ballLeft = centerX - radius
+  const ballRight = centerX + radius
+  const hoopLeft = hoopBox.x
+  const hoopRight = hoopBox.x + hoopBox.width
+  const overlap = Math.max(0, Math.min(ballRight, hoopRight) - Math.max(ballLeft, hoopLeft))
+  return overlap / (radius * 2)
 }
 
 function getEntryAngle(measuredPoints, recentCenters) {

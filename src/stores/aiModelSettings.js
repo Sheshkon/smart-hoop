@@ -14,11 +14,27 @@ import {
 const STORAGE_KEY = 'smart-hoop.ai-model-settings'
 const LEGACY_STORAGE_KEY = 'smart-hoop.ai-model'
 
+export const AI_INFERENCE_FPS_MIN = 10
+export const AI_INFERENCE_FPS_MAX = 60
+export const AI_INFERENCE_FPS_STEP = 1
+export const DEFAULT_AI_INFERENCE_FPS = 30
+
 export const aiModelSettings = reactive({
   modelId: DEFAULT_AI_MODEL_ID,
   classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
   classEnabled: [...DEFAULT_CLASS_ENABLED],
+  inferenceFps: DEFAULT_AI_INFERENCE_FPS,
 })
+
+function clampInferenceFps(value) {
+  const fps = Number(value)
+  if (!Number.isFinite(fps)) return DEFAULT_AI_INFERENCE_FPS
+
+  return Math.min(
+    AI_INFERENCE_FPS_MAX,
+    Math.max(AI_INFERENCE_FPS_MIN, Math.round(fps / AI_INFERENCE_FPS_STEP) * AI_INFERENCE_FPS_STEP),
+  )
+}
 
 function loadSettings() {
   try {
@@ -40,6 +56,7 @@ function loadSettings() {
           ? [...DEFAULT_CLASS_CONF_THRESHOLDS]
           : normalizeClassConfThresholds(parsed.classConfThresholds),
         classEnabled: normalizeClassEnabled(parsed.classEnabled),
+        inferenceFps: clampInferenceFps(parsed.inferenceFps),
       }
     }
   } catch {
@@ -53,6 +70,7 @@ function loadSettings() {
         modelId: legacyModelId,
         classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
         classEnabled: [...DEFAULT_CLASS_ENABLED],
+        inferenceFps: DEFAULT_AI_INFERENCE_FPS,
       }
     }
   } catch {
@@ -63,6 +81,7 @@ function loadSettings() {
     modelId: DEFAULT_AI_MODEL_ID,
     classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
     classEnabled: [...DEFAULT_CLASS_ENABLED],
+    inferenceFps: DEFAULT_AI_INFERENCE_FPS,
   }
 }
 
@@ -75,6 +94,7 @@ function saveSettings() {
         modelId: aiModelSettings.modelId,
         classConfThresholds: [...aiModelSettings.classConfThresholds],
         classEnabled: [...aiModelSettings.classEnabled],
+        inferenceFps: aiModelSettings.inferenceFps,
       }),
     )
     localStorage.removeItem(LEGACY_STORAGE_KEY)
@@ -88,6 +108,7 @@ export function initAiModelSettings() {
   aiModelSettings.modelId = settings.modelId
   aiModelSettings.classConfThresholds = settings.classConfThresholds
   aiModelSettings.classEnabled = settings.classEnabled
+  aiModelSettings.inferenceFps = settings.inferenceFps
   saveSettings()
 }
 
@@ -126,10 +147,16 @@ export function setClassEnabled(index, enabled) {
   saveSettings()
 }
 
+export function setAiInferenceFps(value) {
+  aiModelSettings.inferenceFps = clampInferenceFps(value)
+  saveSettings()
+}
+
 export function resetAiDetectorSettings() {
   aiModelSettings.modelId = DEFAULT_AI_MODEL_ID
   aiModelSettings.classConfThresholds = [...DEFAULT_CLASS_CONF_THRESHOLDS]
   aiModelSettings.classEnabled = [...DEFAULT_CLASS_ENABLED]
+  aiModelSettings.inferenceFps = DEFAULT_AI_INFERENCE_FPS
   saveSettings()
 }
 
@@ -149,4 +176,8 @@ export function getSelectedClassEnabled() {
     aiModelSettings.classEnabled,
     getSelectedAiDetectorModel().classes,
   )
+}
+
+export function getSelectedInferenceIntervalMs() {
+  return Math.round(1000 / clampInferenceFps(aiModelSettings.inferenceFps))
 }

@@ -183,6 +183,51 @@ test('prefers smoothed visible trajectory over noisy raw trajectory', () => {
   assert.equal(result.reason, 'trajectory_net_pass')
 })
 
+test('counts make from raw trajectory when smoothed trajectory misses it', () => {
+  const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
+
+  const result = update(machine, null, 160, {
+    ballVisible: false,
+    ballMeasured: false,
+    ballTrackState: 'predicted',
+    ballHistory: [
+      { x: 72, y: 72, t: 0 },
+      { x: 76, y: 94, t: 40 },
+      { x: 80, y: 116, t: 80 },
+      { x: 84, y: 140, t: 120 },
+    ],
+    rawBallHistory: [
+      { x: 140, y: 72, t: 0 },
+      { x: 140, y: 94, t: 40 },
+      { x: 140, y: 116, t: 80 },
+      { x: 140, y: 140, t: 120 },
+    ],
+  })
+
+  assert.equal(result.event, 'make')
+  assert.equal(result.reason, 'trajectory_net_pass')
+  assert.equal(result.evidence.trajectorySource, 'raw')
+})
+
+test('counts make when swept ball width crosses the rim opening', () => {
+  const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
+
+  const result = update(machine, null, 80, {
+    ballVisible: false,
+    ballMeasured: false,
+    ballTrackState: 'predicted',
+    ballRadius: 14,
+    rawBallHistory: [
+      { x: 140, y: 80, t: 0 },
+      { x: 140, y: 114, t: 60 },
+    ],
+  })
+
+  assert.equal(result.event, 'make')
+  assert.equal(result.reason, 'swept_ball_net_pass')
+  assert.equal(result.evidence.trajectoryDecision.sweptBall, true)
+})
+
 test('counts make when visible trajectory line crosses the hoop center level', () => {
   const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
 
@@ -252,6 +297,33 @@ test('does not count the same track again while it stays inside guard zone after
   ]
 
   assert.deepEqual(repeatedResults.map((result) => result.event), [null, null, null, null])
+})
+
+test('does not recount the same stale trajectory after cooldown', () => {
+  const machine = createShotStateMachine({ cooldownMs: 100, pendingWindowMs: 800 })
+
+  const history = [
+    { x: 140, y: 72, t: 0 },
+    { x: 140, y: 94, t: 40 },
+    { x: 140, y: 116, t: 80 },
+    { x: 140, y: 300, t: 120 },
+  ]
+  const firstResult = update(machine, null, 120, {
+    ballVisible: false,
+    ballMeasured: false,
+    ballTrackState: 'predicted',
+    ballHistory: history,
+  })
+  const repeatedResult = update(machine, null, 1300, {
+    ballVisible: false,
+    ballMeasured: false,
+    ballTrackState: 'predicted',
+    ballHistory: history,
+  })
+
+  assert.equal(firstResult.event, 'make')
+  assert.equal(repeatedResult.event, null)
+  assert.equal(repeatedResult.state, SHOT_STATES.cooldown)
 })
 
 test('counts in-and-out as miss when ball rises out of hoop width after entering net', () => {

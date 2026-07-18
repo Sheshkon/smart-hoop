@@ -55,7 +55,7 @@ import { createTracker } from '../ai/tracking.js'
 import { useFullscreenElement } from '../composables/useFullscreenElement.js'
 import { DETECTOR_MODES } from '../ai/detectorModes.js'
 import { getAiDetectorModel } from '../ai/detectorModels.js'
-import { aiModelSettings } from '../stores/aiModelSettings.js'
+import { aiModelSettings, getSelectedInferenceIntervalMs } from '../stores/aiModelSettings.js'
 import { poseSettings } from '../stores/poseSettings.js'
 import FullscreenToggleButton from './FullscreenToggleButton.vue'
 import { TRAJECTORY_KEYS } from '../shot/testTrajectories.js'
@@ -1078,6 +1078,22 @@ watch(
     }
 
     detector.updateThresholds(thresholds, enabled)
+  },
+)
+
+watch(
+  () => aiModelSettings.inferenceFps,
+  () => {
+    if (
+      props.mode !== 'session' ||
+      activeDetectorMode.value !== DETECTOR_MODES.AI ||
+      !detectorReady.value ||
+      !detector?.updateInferenceInterval
+    ) {
+      return
+    }
+
+    detector.updateInferenceInterval(getSelectedInferenceIntervalMs())
   },
 )
 

@@ -94,6 +94,28 @@
       </section>
 
       <section class="settings-section">
+        <h2 class="settings-section__title">Частота AI-детекции</h2>
+        <p class="settings-section__hint">
+          Чем выше FPS, тем лучше ловится быстрый мяч, но тем выше нагрузка на устройство.
+        </p>
+
+        <label class="form-field settings-fps-field">
+          <span class="form-field__label">
+            Частота: {{ aiModelSettings.inferenceFps }} FPS
+          </span>
+          <input
+            :value="aiModelSettings.inferenceFps"
+            type="range"
+            class="settings-fps-field__range"
+            :min="AI_INFERENCE_FPS_MIN"
+            :max="AI_INFERENCE_FPS_MAX"
+            :step="AI_INFERENCE_FPS_STEP"
+            @input="setAiInferenceFps(Number($event.target.value))"
+          >
+        </label>
+      </section>
+
+      <section class="settings-section">
         <h2 class="settings-section__title">Скелет игрока (MediaPipe)</h2>
         <p class="settings-section__hint">
           Отдельная система от детектора мяча и кольца. Накладывает скелет поверх видео в AI-сессии.
@@ -171,8 +193,12 @@ import {
 } from '../ai/detectorModels.js'
 import { POSE_MODES } from '../ai/poseDetectorFactory.js'
 import {
+  AI_INFERENCE_FPS_MAX,
+  AI_INFERENCE_FPS_MIN,
+  AI_INFERENCE_FPS_STEP,
   aiModelSettings,
   resetAiDetectorSettings,
+  setAiInferenceFps,
   setClassEnabled,
   setAiDetectorModel,
   setClassConfThreshold,

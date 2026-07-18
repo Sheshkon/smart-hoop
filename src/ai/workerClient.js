@@ -4,7 +4,7 @@ const DEFAULT_INFERENCE_INTERVAL_MS = 40
  * @param {{ inferenceIntervalMs?: number }} [options]
  */
 export function createDetectorWorkerClient(options = {}) {
-  const inferenceIntervalMs = options.inferenceIntervalMs ?? DEFAULT_INFERENCE_INTERVAL_MS
+  let inferenceIntervalMs = options.inferenceIntervalMs ?? DEFAULT_INFERENCE_INTERVAL_MS
 
   /** @type {Worker | null} */
   let worker = null
@@ -99,6 +99,13 @@ export function createDetectorWorkerClient(options = {}) {
   function setThresholds(classConfThresholds, classEnabled) {
     if (!worker || !ready) return
     worker.postMessage({ type: 'set-thresholds', classConfThresholds, classEnabled })
+  }
+
+  function setInferenceIntervalMs(value) {
+    const interval = Number(value)
+    inferenceIntervalMs = Number.isFinite(interval) && interval > 0
+      ? interval
+      : DEFAULT_INFERENCE_INTERVAL_MS
   }
 
   function isSourceReady(source) {
@@ -221,5 +228,5 @@ export function createDetectorWorkerClient(options = {}) {
     initReject = null
   }
 
-  return { init, detect, setThresholds, dispose }
+  return { init, detect, setThresholds, setInferenceIntervalMs, dispose }
 }

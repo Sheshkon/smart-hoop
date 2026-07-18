@@ -4,12 +4,15 @@ import {
   getSelectedAiDetectorModel,
   getSelectedClassEnabled,
   getSelectedClassConfThresholds,
+  getSelectedInferenceIntervalMs,
 } from '../stores/aiModelSettings.js'
 import { createDetectorWorkerClient } from './workerClient.js'
 import { remapDetectionToCanvas } from './yoloUtils.js'
 
 export function createOnnxDetector() {
-  const workerClient = createDetectorWorkerClient()
+  const workerClient = createDetectorWorkerClient({
+    inferenceIntervalMs: getSelectedInferenceIntervalMs(),
+  })
   let initError = null
 
   return {
@@ -36,6 +39,10 @@ export function createOnnxDetector() {
 
     updateThresholds(classConfThresholds, classEnabled) {
       workerClient.setThresholds(classConfThresholds, classEnabled)
+    },
+
+    updateInferenceInterval(intervalMs) {
+      workerClient.setInferenceIntervalMs(intervalMs)
     },
 
     detect(input) {
