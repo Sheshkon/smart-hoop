@@ -181,24 +181,62 @@ export function postprocessYoloOutput(output, options = {}) {
 
   const candidates = []
 
-  if (dim2 !== 6) {
+  if (dim2 === 6) {
+    for (let i = 0; i < dim1; i++) {
+      const offset = i * 6
+      const confidence = data[offset + 4]
+      const classIndex = Math.trunc(data[offset + 5])
+
+      if (classEnabled[classIndex] === false) continue
+      if (confidence < (classConfThresholds[classIndex] ?? confThreshold)) continue
+
+      const x1 = data[offset]
+      const y1 = data[offset + 1]
+      const x2 = data[offset + 2]
+      const y2 = data[offset + 3]
+      const width = x2 - x1
+      const height = y2 - y1
+
+      if (width <= 0 || height <= 0) continue
+
+      candidates.push({
+        classIndex,
+        confidence,
+        box: {
+          x: x1,
+          y: y1,
+          width,
+          height,
+        },
+      })
+    }
+
+    return nonMaxSuppression(candidates, iouThreshold)
+  }
+
+  if (dim1 < 6) {
     throw new Error(`Unsupported YOLO output shape: ${output.dims.join('x')}`)
   }
 
-  for (let i = 0; i < dim1; i++) {
-    const offset = i * 6
-    const confidence = data[offset + 4]
-    const classIndex = Math.trunc(data[offset + 5])
+  for (let i = 0; i < dim2; i++) {
+    let classIndex = -1
+    let confidence = 0
+
+    for (let classOffset = 4; classOffset < dim1; classOffset += 1) {
+      const score = data[classOffset * dim2 + i]
+      if (score > confidence) {
+        confidence = score
+        classIndex = classOffset - 4
+      }
+    }
 
     if (classEnabled[classIndex] === false) continue
     if (confidence < (classConfThresholds[classIndex] ?? confThreshold)) continue
 
-    const x1 = data[offset]
-    const y1 = data[offset + 1]
-    const x2 = data[offset + 2]
-    const y2 = data[offset + 3]
-    const width = x2 - x1
-    const height = y2 - y1
+    const centerX = data[i]
+    const centerY = data[dim2 + i]
+    const width = data[dim2 * 2 + i]
+    const height = data[dim2 * 3 + i]
 
     if (width <= 0 || height <= 0) continue
 
@@ -206,8 +244,8 @@ export function postprocessYoloOutput(output, options = {}) {
       classIndex,
       confidence,
       box: {
-        x: x1,
-        y: y1,
+        x: centerX - width / 2,
+        y: centerY - height / 2,
         width,
         height,
       },

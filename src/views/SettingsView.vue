@@ -45,6 +45,30 @@
             <span class="model-picker__title">{{ model.label }}</span>
             <span class="model-picker__meta">{{ model.description }} · {{ model.inputSize }}×{{ model.inputSize }}</span>
             <span class="model-picker__file">{{ model.fileName }}</span>
+            <span v-if="model.sourceUrl" class="model-picker__file">Нужен экспорт best.pt → ONNX из внешнего репозитория</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h2 class="settings-section__title">Алгоритм определения броска</h2>
+        <p class="settings-section__hint">
+          Avi Shah использует переход мяча из зоны над кольцом вниз и линейный прогноз пересечения траектории с кольцом.
+        </p>
+
+        <div class="model-picker" role="radiogroup" aria-label="Алгоритм определения броска">
+          <button
+            v-for="option in shotAlgorithmOptions"
+            :key="option.value"
+            type="button"
+            class="model-picker__option"
+            :class="{ 'model-picker__option--active': aiModelSettings.shotAlgorithm === option.value }"
+            role="radio"
+            :aria-checked="aiModelSettings.shotAlgorithm === option.value"
+            @click="setShotAlgorithm(option.value)"
+          >
+            <span class="model-picker__title">{{ option.label }}</span>
+            <span class="model-picker__meta">{{ option.description }}</span>
           </button>
         </div>
       </section>
@@ -202,6 +226,8 @@ import {
   setClassEnabled,
   setAiDetectorModel,
   setClassConfThreshold,
+  setShotAlgorithm,
+  SHOT_ALGORITHMS,
 } from '../stores/aiModelSettings.js'
 import {
   getPoseModelFileName,
@@ -241,6 +267,24 @@ const poseModeOptions = [
     value: POSE_MODES.MEDIAPIPE,
     label: 'MediaPipe Pose',
     description: 'Скелет игрока поверх видео',
+  },
+]
+
+const shotAlgorithmOptions = [
+  {
+    value: SHOT_ALGORITHMS.SMART_HOOP,
+    label: 'Smart Hoop',
+    description: 'Текущая логика: вход в кольцо, прохождение сетки, rim-out и защита от повторного счёта',
+  },
+  {
+    value: SHOT_ALGORITHMS.HYBRID,
+    label: 'Гибрид',
+    description: 'Smart Hoop как основной алгоритм, Avi Shah как траекторный fallback после прохода мяча вниз',
+  },
+  {
+    value: SHOT_ALGORITHMS.AVISHAH,
+    label: 'Avi Shah',
+    description: 'Линейный прогноз траектории по последним точкам мяча относительно найденного кольца',
   },
 ]
 

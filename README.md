@@ -85,10 +85,13 @@ npm install
 
 | Файл | Назначение |
 |------|------------|
-| `public/models/nano/basketball_nano_640.onnx` | Детектор: мяч, игрок, кольцо (YOLO) |
-| `public/models/nano/basketball_nano_480.onnx` | Более легкая версия детектора 480×480 |
-| `public/models/nano/basketball_nano_352.onnx` | Более легкая версия детектора 352×352 |
+| `public/models/nano/basketball_yolo26_640.onnx` | Детектор: мяч, игрок, кольцо (YOLO) |
+| `public/models/nano/basketball_yolo26_480.onnx` | Более легкая версия детектора 480×480 |
+| `public/models/nano/basketball_yolo26_352.onnx` | Более легкая версия детектора 352×352 |
+| `public/models/avishah/best.onnx` | Опциональный экспорт `best.pt` из `avishah3/AI-Basketball-Shot-Detection-Tracker` |
 | `public/models/mediapipe/pose_landmarker_lite.task` | Скелет игрока (MediaPipe, опционально) |
+
+Модель Avi Shah в исходном репозитории опубликована как PyTorch `best.pt`; для браузера ее нужно экспортировать в ONNX и положить в `public/models/avishah/best.onnx`. В настройках приложения после этого можно выбрать модель `Avi Shah YOLOv8 best (640)` и алгоритм броска `Avi Shah`.
 
 3. (Опционально) Сгенерируйте иконки и splash screen:
 

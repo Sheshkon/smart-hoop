@@ -55,7 +55,12 @@ import { createTracker } from '../ai/tracking.js'
 import { useFullscreenElement } from '../composables/useFullscreenElement.js'
 import { DETECTOR_MODES } from '../ai/detectorModes.js'
 import { getAiDetectorModel } from '../ai/detectorModels.js'
-import { aiModelSettings, getSelectedInferenceIntervalMs } from '../stores/aiModelSettings.js'
+import {
+  aiModelSettings,
+  getSelectedInferenceIntervalMs,
+  getSelectedShotAlgorithm,
+  SHOT_ALGORITHMS,
+} from '../stores/aiModelSettings.js'
 import { poseSettings } from '../stores/poseSettings.js'
 import FullscreenToggleButton from './FullscreenToggleButton.vue'
 import { TRAJECTORY_KEYS } from '../shot/testTrajectories.js'
@@ -830,16 +835,21 @@ function toPortraitBallHistory(history, result) {
 function processShotDetection(result, timestampMs) {
   if (!props.autoDetectShots || props.paused || !result.hoopBox) return
 
+  const shotAlgorithm = getSelectedShotAlgorithm()
+  const shotHoopBox =
+    shotAlgorithm === SHOT_ALGORITHMS.AVISHAH || shotAlgorithm === SHOT_ALGORITHMS.HYBRID
+      ? result.hoopSourceBox ?? result.hoopBox
+      : result.hoopBox
   const shotBallCenter = result.ballCenter
   const ballHistory = toPortraitBallHistory(result.ballHistory, result)
   const rawBallHistory = toPortraitBallHistory(result.rawBallHistory, result)
-  const ballDetection = result.detections.find((item) => item.className === 'ball')
+  const ballDetection = result.detections.find((item) => (item.appClass ?? item.className) === 'ball')
   const ballRadius = ballDetection?.box
     ? (Math.min(ballDetection.box.width, ballDetection.box.height) / 2) / result.viewport.scale
     : 0
   const { ballCenter, hoopBox } = toPortraitShotSpace(
     shotBallCenter,
-    result.hoopBox,
+    shotHoopBox,
     result.viewport,
     result.orientation,
   )
@@ -861,6 +871,7 @@ function processShotDetection(result, timestampMs) {
     hoopStability: result.hoopStability,
     hoopLost: result.hoopLost,
     trackId: result.ballTrackId,
+    shotAlgorithm,
   })
 
   shotState.value = machineResult.state
@@ -1059,6 +1070,15 @@ watch(
     if (props.mode !== 'session' || activeDetectorMode.value !== DETECTOR_MODES.AI) return
     detectorError.value = ''
     await initDetector()
+  },
+)
+
+watch(
+  () => aiModelSettings.shotAlgorithm,
+  () => {
+    if (props.mode !== 'session') return
+    shotMachine.reset()
+    shotState.value = SHOT_STATES.idle
   },
 )
 

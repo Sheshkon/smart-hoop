@@ -18,12 +18,19 @@ export const AI_INFERENCE_FPS_MIN = 10
 export const AI_INFERENCE_FPS_MAX = 60
 export const AI_INFERENCE_FPS_STEP = 1
 export const DEFAULT_AI_INFERENCE_FPS = 30
+export const SHOT_ALGORITHMS = {
+  SMART_HOOP: 'smart-hoop',
+  HYBRID: 'hybrid',
+  AVISHAH: 'avishah',
+}
+export const DEFAULT_SHOT_ALGORITHM = SHOT_ALGORITHMS.SMART_HOOP
 
 export const aiModelSettings = reactive({
   modelId: DEFAULT_AI_MODEL_ID,
   classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
   classEnabled: [...DEFAULT_CLASS_ENABLED],
   inferenceFps: DEFAULT_AI_INFERENCE_FPS,
+  shotAlgorithm: DEFAULT_SHOT_ALGORITHM,
 })
 
 function clampInferenceFps(value) {
@@ -50,13 +57,17 @@ function loadSettings() {
       const settingsVersion = Number(parsed.settingsVersion) || 1
       const useDefaultThresholds = settingsVersion < AI_MODEL_SETTINGS_VERSION
 
+      const model = getAiDetectorModel(modelId)
+
       return {
         modelId,
-        classConfThresholds: useDefaultThresholds
-          ? [...DEFAULT_CLASS_CONF_THRESHOLDS]
-          : normalizeClassConfThresholds(parsed.classConfThresholds),
-        classEnabled: normalizeClassEnabled(parsed.classEnabled),
+        classConfThresholds: normalizeClassConfThresholds(
+          useDefaultThresholds ? DEFAULT_CLASS_CONF_THRESHOLDS : parsed.classConfThresholds,
+          model.classes,
+        ),
+        classEnabled: normalizeClassEnabled(parsed.classEnabled, model.classes),
         inferenceFps: clampInferenceFps(parsed.inferenceFps),
+        shotAlgorithm: normalizeShotAlgorithm(parsed.shotAlgorithm),
       }
     }
   } catch {
@@ -71,6 +82,7 @@ function loadSettings() {
         classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
         classEnabled: [...DEFAULT_CLASS_ENABLED],
         inferenceFps: DEFAULT_AI_INFERENCE_FPS,
+        shotAlgorithm: DEFAULT_SHOT_ALGORITHM,
       }
     }
   } catch {
@@ -82,7 +94,12 @@ function loadSettings() {
     classConfThresholds: [...DEFAULT_CLASS_CONF_THRESHOLDS],
     classEnabled: [...DEFAULT_CLASS_ENABLED],
     inferenceFps: DEFAULT_AI_INFERENCE_FPS,
+    shotAlgorithm: DEFAULT_SHOT_ALGORITHM,
   }
+}
+
+function normalizeShotAlgorithm(value) {
+  return Object.values(SHOT_ALGORITHMS).includes(value) ? value : DEFAULT_SHOT_ALGORITHM
 }
 
 function saveSettings() {
@@ -95,6 +112,7 @@ function saveSettings() {
         classConfThresholds: [...aiModelSettings.classConfThresholds],
         classEnabled: [...aiModelSettings.classEnabled],
         inferenceFps: aiModelSettings.inferenceFps,
+        shotAlgorithm: aiModelSettings.shotAlgorithm,
       }),
     )
     localStorage.removeItem(LEGACY_STORAGE_KEY)
@@ -109,6 +127,7 @@ export function initAiModelSettings() {
   aiModelSettings.classConfThresholds = settings.classConfThresholds
   aiModelSettings.classEnabled = settings.classEnabled
   aiModelSettings.inferenceFps = settings.inferenceFps
+  aiModelSettings.shotAlgorithm = settings.shotAlgorithm
   saveSettings()
 }
 
@@ -117,6 +136,11 @@ export function setAiDetectorModel(modelId) {
   if (!model) return
 
   aiModelSettings.modelId = model.id
+  aiModelSettings.classConfThresholds = normalizeClassConfThresholds(
+    aiModelSettings.classConfThresholds,
+    model.classes,
+  )
+  aiModelSettings.classEnabled = normalizeClassEnabled(aiModelSettings.classEnabled, model.classes)
   saveSettings()
 }
 
@@ -152,11 +176,17 @@ export function setAiInferenceFps(value) {
   saveSettings()
 }
 
+export function setShotAlgorithm(value) {
+  aiModelSettings.shotAlgorithm = normalizeShotAlgorithm(value)
+  saveSettings()
+}
+
 export function resetAiDetectorSettings() {
   aiModelSettings.modelId = DEFAULT_AI_MODEL_ID
   aiModelSettings.classConfThresholds = [...DEFAULT_CLASS_CONF_THRESHOLDS]
   aiModelSettings.classEnabled = [...DEFAULT_CLASS_ENABLED]
   aiModelSettings.inferenceFps = DEFAULT_AI_INFERENCE_FPS
+  aiModelSettings.shotAlgorithm = DEFAULT_SHOT_ALGORITHM
   saveSettings()
 }
 
@@ -180,4 +210,8 @@ export function getSelectedClassEnabled() {
 
 export function getSelectedInferenceIntervalMs() {
   return Math.round(1000 / clampInferenceFps(aiModelSettings.inferenceFps))
+}
+
+export function getSelectedShotAlgorithm() {
+  return normalizeShotAlgorithm(aiModelSettings.shotAlgorithm)
 }

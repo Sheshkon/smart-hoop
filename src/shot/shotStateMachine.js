@@ -43,6 +43,11 @@ const MIN_SHOT_VERTICAL_PROGRESS_FACTOR = 0.75
 const MIN_ENTRY_VERTICAL_COMPONENT = 0.3
 const MIN_ENTRY_VERTICAL_PROGRESS_FACTOR = 0.25
 const TRAJECTORY_ENTRY_TOLERANCE_FACTOR = 0.16
+export const SHOT_ALGORITHMS = {
+  SMART_HOOP: 'smart-hoop',
+  HYBRID: 'hybrid',
+  AVISHAH: 'avishah',
+}
 
 /**
  * @param {{
@@ -77,6 +82,13 @@ export function createShotStateMachine(options = {}) {
   let recentCenters = []
   let lastHoopBox = null
   let lastBallRadius = 0
+  let avishahFrameCount = 0
+  let avishahBallPos = []
+  let avishahHoopPos = []
+  let avishahUp = false
+  let avishahDown = false
+  let avishahUpFrame = 0
+  let avishahDownFrame = 0
 
   function resetAttemptData() {
     attemptStartedAt = null
@@ -92,6 +104,16 @@ export function createShotStateMachine(options = {}) {
     recentCenters = []
     lastHoopBox = null
     lastBallRadius = 0
+    resetAvishahAttemptData()
+  }
+
+  function resetAvishahAttemptData() {
+    avishahBallPos = []
+    avishahHoopPos = []
+    avishahUp = false
+    avishahDown = false
+    avishahUpFrame = 0
+    avishahDownFrame = 0
   }
 
   function reset() {
@@ -99,6 +121,7 @@ export function createShotStateMachine(options = {}) {
     cooldownUntil = 0
     lastTrackId = null
     lastResultAt = null
+    avishahFrameCount = 0
     resetAttemptData()
   }
 
@@ -272,6 +295,7 @@ export function createShotStateMachine(options = {}) {
    * }}
   */
   function update(input) {
+    const algorithm = input.shotAlgorithm ?? options.shotAlgorithm ?? SHOT_ALGORITHMS.SMART_HOOP
     const { hoopBox, timestampMs } = input
     const trackId = input.trackId ?? null
     const trajectorySets = getTrajectorySets(input, timestampMs)
@@ -288,9 +312,35 @@ export function createShotStateMachine(options = {}) {
         input.ballTrackState === 'detected' ||
         input.ballTrackState === 'tracked')
     const hoopStable = input.hoopStable !== false && input.hoopLost !== true
+    let hybridAvishahDecision = null
 
     if (updateCooldown(ballCenter, hoopBox, timestampMs, trackId, latestTrajectoryAt)) {
       return { state, event: null }
+    }
+
+    if (algorithm === SHOT_ALGORITHMS.AVISHAH) {
+      return updateAvishahAlgorithm({
+        ballCenter,
+        hoopBox,
+        timestampMs,
+        ballVisible,
+        ballMeasured,
+        ballRadius,
+        hoopStable,
+        trackId,
+        hoopLost: input.hoopLost,
+      })
+    }
+
+    if (algorithm === SHOT_ALGORITHMS.HYBRID) {
+      hybridAvishahDecision = updateAvishahTracking({
+        ballCenter,
+        hoopBox,
+        ballVisible,
+        ballMeasured,
+        ballRadius,
+        trackId,
+      })
     }
 
     if (state !== SHOT_STATES.idle && input.hoopLost) {
@@ -657,6 +707,20 @@ export function createShotStateMachine(options = {}) {
     const inAttempt = state === SHOT_STATES.candidate || state === SHOT_STATES.armed
     const scoringMissCandidate = state === SHOT_STATES.armed
 
+    if (algorithm === SHOT_ALGORITHMS.HYBRID && inAttempt && hybridAvishahDecision) {
+      return finishAttempt(hybridAvishahDecision.event, timestampMs, {
+        reason: hybridAvishahDecision.reason,
+        evidence: {
+          hoopStable,
+          lastPointMeasured: Boolean(ballMeasured),
+          usedTrajectoryForDecision: true,
+          algorithm: SHOT_ALGORITHMS.HYBRID,
+          avishahFallback: true,
+          avishahDecision: hybridAvishahDecision.evidence,
+        },
+      })
+    }
+
     if (scoringMissCandidate && ballMeasured && missByPassingHoopLevel(ballCenter, hoopBox, ballRadius)) {
       return finishAttempt('miss', timestampMs, {
         reason: 'passed_hoop_level',
@@ -692,6 +756,120 @@ export function createShotStateMachine(options = {}) {
     }
 
     return { state, event: null }
+  }
+
+  function updateAvishahAlgorithm(input) {
+    const {
+      ballCenter,
+      hoopBox,
+      timestampMs,
+      ballVisible,
+      ballMeasured,
+      ballRadius,
+      hoopStable,
+      trackId,
+      hoopLost,
+    } = input
+
+    if (hoopLost) {
+      return finishAttempt('unknown', timestampMs, {
+        reason: 'hoop_lost',
+        evidence: { algorithm: SHOT_ALGORITHMS.AVISHAH, hoopStable: false },
+      })
+    }
+
+    const decision = updateAvishahTracking({
+      ballCenter,
+      hoopBox,
+      ballVisible,
+      ballMeasured,
+      ballRadius,
+      trackId,
+    })
+
+    if (!decision) {
+      if (!ballVisible || !ballCenter) {
+        state = avishahUp || avishahDown ? SHOT_STATES.candidate : SHOT_STATES.idle
+      } else {
+        state = avishahUp ? SHOT_STATES.armed : SHOT_STATES.candidate
+      }
+      return { state, event: null }
+    }
+
+    return finishAttempt(decision.event, timestampMs, {
+      reason: decision.reason,
+      evidence: {
+        algorithm: SHOT_ALGORITHMS.AVISHAH,
+        hoopStable,
+        lastPointMeasured: Boolean(ballMeasured),
+        measuredCount: avishahBallPos.length,
+        usedTrajectoryForDecision: true,
+        avishahDecision: decision.evidence,
+      },
+    })
+  }
+
+  function updateAvishahTracking(input) {
+    const {
+      ballCenter,
+      hoopBox,
+      ballVisible,
+      ballMeasured,
+      ballRadius,
+      trackId,
+    } = input
+
+    avishahFrameCount += 1
+    lastHoopBox = { ...hoopBox }
+    lastBallRadius = ballRadius
+    if (trackId != null) lastTrackId = trackId
+
+    avishahHoopPos.push({
+      center: getHoopCenter(hoopBox),
+      frame: avishahFrameCount,
+      width: hoopBox.width,
+      height: hoopBox.height,
+      confidence: 1,
+    })
+    avishahHoopPos = cleanAvishahHoopPos(avishahHoopPos)
+
+    if (!ballVisible || !ballCenter) return null
+
+    const diameter = Math.max(0, ballRadius * 2)
+    avishahBallPos.push({
+      center: { ...ballCenter },
+      frame: avishahFrameCount,
+      width: diameter,
+      height: diameter,
+      confidence: ballMeasured ? 1 : 0.3,
+    })
+    avishahBallPos = cleanAvishahBallPos(avishahBallPos, avishahFrameCount)
+
+    if (!avishahUp && avishahDetectUp(avishahBallPos, avishahHoopPos)) {
+      avishahUp = true
+      avishahUpFrame = avishahBallPos[avishahBallPos.length - 1].frame
+      state = SHOT_STATES.armed
+    }
+
+    if (avishahUp && !avishahDown && avishahDetectDown(avishahBallPos, avishahHoopPos)) {
+      avishahDown = true
+      avishahDownFrame = avishahBallPos[avishahBallPos.length - 1].frame
+    }
+
+    if (avishahUp && avishahDown && avishahUpFrame < avishahDownFrame) {
+      const made = avishahScore(avishahBallPos, avishahHoopPos)
+      return {
+        event: made ? 'make' : 'miss',
+        reason: made ? 'avishah_trajectory_score' : 'avishah_trajectory_miss',
+        evidence: {
+          measuredCount: avishahBallPos.length,
+          upFrame: avishahUpFrame,
+          downFrame: avishahDownFrame,
+        },
+      }
+    }
+
+    return null
   }
 
   return { update, reset, getState }
@@ -755,6 +933,109 @@ function normalizeTrajectoryPoint(point, timestampMs, framesBack) {
     y,
     t: Number.isFinite(point.t) ? point.t : timestampMs - framesBack * 33,
   }
+}
+
+function avishahScore(ballPos, hoopPos) {
+  if (!ballPos.length || !hoopPos.length) return false
+
+  const hoop = hoopPos[hoopPos.length - 1]
+  const rimHeight = hoop.center.y - 0.5 * hoop.height
+  const x = []
+  const y = []
+
+  for (let index = ballPos.length - 1; index >= 0; index -= 1) {
+    if (ballPos[index].center.y < rimHeight) {
+      x.push(ballPos[index].center.x)
+      y.push(ballPos[index].center.y)
+      if (index + 1 < ballPos.length) {
+        x.push(ballPos[index + 1].center.x)
+        y.push(ballPos[index + 1].center.y)
+      }
+      break
+    }
+  }
+
+  if (x.length < 2) return false
+
+  const predictedX = x[1] === x[0]
+    ? x[0]
+    : y[1] === y[0]
+      ? x[0]
+    : x[0] + ((rimHeight - y[0]) * (x[1] - x[0])) / (y[1] - y[0])
+  const rimX1 = hoop.center.x - 0.4 * hoop.width
+  const rimX2 = hoop.center.x + 0.4 * hoop.width
+  const reboundZone = 10
+
+  return predictedX > rimX1 - reboundZone && predictedX < rimX2 + reboundZone
+}
+
+function avishahDetectDown(ballPos, hoopPos) {
+  if (!ballPos.length || !hoopPos.length) return false
+  const ball = ballPos[ballPos.length - 1]
+  const hoop = hoopPos[hoopPos.length - 1]
+  return ball.center.y > hoop.center.y + 0.5 * hoop.height
+}
+
+function avishahDetectUp(ballPos, hoopPos) {
+  if (!ballPos.length || !hoopPos.length) return false
+  const ball = ballPos[ballPos.length - 1]
+  const hoop = hoopPos[hoopPos.length - 1]
+  const x1 = hoop.center.x - 4 * hoop.width
+  const x2 = hoop.center.x + 4 * hoop.width
+  const y1 = hoop.center.y - 2 * hoop.height
+  const y2 = hoop.center.y - 0.5 * hoop.height
+
+  return ball.center.x > x1 && ball.center.x < x2 && ball.center.y > y1 && ball.center.y < y2
+}
+
+function cleanAvishahBallPos(ballPos, frameCount) {
+  if (ballPos.length > 1) {
+    const previous = ballPos[ballPos.length - 2]
+    const current = ballPos[ballPos.length - 1]
+    const frameDiff = current.frame - previous.frame
+    const dist = Math.hypot(
+      current.center.x - previous.center.x,
+      current.center.y - previous.center.y,
+    )
+    const maxDist = Math.max(12, 4 * Math.hypot(previous.width, previous.height))
+
+    if (dist > maxDist && frameDiff < 5) {
+      ballPos.pop()
+    } else if (current.width * 1.4 < current.height || current.height * 1.4 < current.width) {
+      ballPos.pop()
+    }
+  }
+
+  while (ballPos.length && frameCount - ballPos[0].frame > 30) {
+    ballPos.shift()
+  }
+
+  return ballPos
+}
+
+function cleanAvishahHoopPos(hoopPos) {
+  if (hoopPos.length > 1) {
+    const previous = hoopPos[hoopPos.length - 2]
+    const current = hoopPos[hoopPos.length - 1]
+    const frameDiff = current.frame - previous.frame
+    const dist = Math.hypot(
+      current.center.x - previous.center.x,
+      current.center.y - previous.center.y,
+    )
+    const maxDist = 0.5 * Math.hypot(previous.width, previous.height)
+
+    if (dist > maxDist && frameDiff < 5) {
+      hoopPos.pop()
+    } else if (current.width * 1.3 < current.height || current.height * 1.3 < current.width) {
+      hoopPos.pop()
+    }
+  }
+
+  while (hoopPos.length > 25) {
+    hoopPos.shift()
+  }
+
+  return hoopPos
 }
 
 function trajectoryWasAboveHoop(points, hoopBox) {

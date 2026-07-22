@@ -1,5 +1,5 @@
 /** @typedef {{ index: number, className: string, label: string, roleLabel: string, appClass: 'ball' | 'hoop' | 'person' | null }} DetectorClassMeta */
-/** @typedef {{ id: string, label: string, description: string, fileName: string, inputSize: number, classes: DetectorClassMeta[] }} AiDetectorModel */
+/** @typedef {{ id: string, label: string, description: string, fileName: string, inputSize: number, classes: DetectorClassMeta[], sourceUrl?: string }} AiDetectorModel */
 
 /** @type {DetectorClassMeta[]} */
 export const BASKETBALL_DETECTOR_CLASSES = [
@@ -28,10 +28,27 @@ export const BASKETBALL_DETECTOR_CLASSES = [
 
 export const DETECTOR_CLASSES = BASKETBALL_DETECTOR_CLASSES
 
+export const AVISHAH_DETECTOR_CLASSES = [
+  {
+    index: 0,
+    className: 'basketball',
+    label: 'Basketball',
+    roleLabel: 'Мяч для алгоритма Avi Shah',
+    appClass: 'ball',
+  },
+  {
+    index: 1,
+    className: 'basketball_hoop',
+    label: 'Basketball Hoop',
+    roleLabel: 'Кольцо для алгоритма Avi Shah',
+    appClass: 'hoop',
+  },
+]
+
 export const DEFAULT_CLASS_CONF_THRESHOLDS = [0.15, 0.15, 0.15]
 export const DEFAULT_CLASS_ENABLED = [true, true, true]
 
-export const AI_MODEL_SETTINGS_VERSION = 9
+export const AI_MODEL_SETTINGS_VERSION = 10
 
 export const CONF_THRESHOLD_MIN = 0.05
 export const CONF_THRESHOLD_MAX = 0.95
@@ -57,6 +74,15 @@ export const AI_DETECTOR_MODELS = [
   createBasketballYolo26Model(640),
   createBasketballYolo26Model(480),
   createBasketballYolo26Model(352),
+  {
+    id: 'avishah-yolov8-best-640',
+    label: 'Avi Shah YOLOv8 best (640)',
+    description: 'Классы: Basketball, Basketball Hoop',
+    fileName: 'avishah/best.onnx',
+    inputSize: 640,
+    classes: AVISHAH_DETECTOR_CLASSES,
+    sourceUrl: 'https://github.com/avishah3/AI-Basketball-Shot-Detection-Tracker',
+  },
 ]
 
 export const DEFAULT_AI_MODEL_ID = 'basketball-yolo26-480'

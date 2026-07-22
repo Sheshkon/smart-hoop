@@ -30,11 +30,53 @@ test('rejects unsupported YOLO output shapes', () => {
   assert.throws(
     () =>
       postprocessYoloOutput({
-        dims: [1, 7, 2],
-        data: new Float32Array(14),
+        dims: [1, 5, 2],
+        data: new Float32Array(10),
       }),
-    /Unsupported YOLO output shape: 1x7x2/,
+    /Unsupported YOLO output shape: 1x5x2/,
   )
+})
+
+test('postprocesses raw YOLOv8 output columns', () => {
+  const detections = postprocessYoloOutput(
+    {
+      dims: [1, 6, 2],
+      data: new Float32Array([
+        20, 60,
+        30, 70,
+        10, 20,
+        12, 24,
+        0.9, 0.1,
+        0.2, 0.8,
+      ]),
+    },
+    {
+      classConfThresholds: [0.15, 0.15],
+    },
+  )
+
+  assert.deepEqual(detections, [
+    {
+      classIndex: 0,
+      confidence: Math.fround(0.9),
+      box: {
+        x: 15,
+        y: 24,
+        width: 10,
+        height: 12,
+      },
+    },
+    {
+      classIndex: 1,
+      confidence: Math.fround(0.8),
+      box: {
+        x: 50,
+        y: 58,
+        width: 20,
+        height: 24,
+      },
+    },
+  ])
 })
 
 test('skips disabled classes', () => {

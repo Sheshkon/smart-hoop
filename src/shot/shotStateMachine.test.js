@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createShotStateMachine, SHOT_STATES } from './shotStateMachine.js'
+import { createShotStateMachine, SHOT_ALGORITHMS, SHOT_STATES } from './shotStateMachine.js'
 
 const hoopBox = { x: 100, y: 100, width: 80, height: 20 }
 const ballRadius = 10
@@ -404,4 +404,67 @@ test('returns unknown when hoop becomes unstable after rim entry', () => {
   assert.equal(result.event, 'unknown')
   assert.equal(result.reason, 'unstable_hoop_after_entry')
   assert.equal(result.evidence.hoopStable, false)
+})
+
+test('avishah algorithm counts make when projected ball path crosses rim', () => {
+  const machine = createShotStateMachine({
+    cooldownMs: 100,
+    shotAlgorithm: SHOT_ALGORITHMS.AVISHAH,
+  })
+
+  update(machine, { x: 140, y: 90 }, 0)
+  const result = update(machine, { x: 140, y: 130 }, 40)
+
+  assert.equal(result.event, 'make')
+  assert.equal(result.reason, 'avishah_trajectory_score')
+  assert.equal(result.evidence.algorithm, SHOT_ALGORITHMS.AVISHAH)
+})
+
+test('avishah algorithm counts miss when projected ball path misses rim', () => {
+  const machine = createShotStateMachine({
+    cooldownMs: 100,
+    shotAlgorithm: SHOT_ALGORITHMS.AVISHAH,
+  })
+
+  update(machine, { x: 70, y: 90 }, 0)
+  const result = update(machine, { x: 70, y: 130 }, 40)
+
+  assert.equal(result.event, 'miss')
+  assert.equal(result.reason, 'avishah_trajectory_miss')
+})
+
+test('hybrid algorithm uses avishah trajectory as fallback for early make', () => {
+  const machine = createShotStateMachine({
+    cooldownMs: 100,
+    shotAlgorithm: SHOT_ALGORITHMS.HYBRID,
+  })
+
+  update(machine, { x: 140, y: 90 }, 0)
+  const result = update(machine, { x: 140, y: 130 }, 40, {
+    ballMeasured: false,
+    ballTrackState: 'predicted',
+  })
+
+  assert.equal(result.event, 'make')
+  assert.equal(result.reason, 'avishah_trajectory_score')
+  assert.equal(result.evidence.algorithm, SHOT_ALGORITHMS.HYBRID)
+  assert.equal(result.evidence.avishahFallback, true)
+})
+
+test('hybrid algorithm uses avishah trajectory as fallback for early miss', () => {
+  const machine = createShotStateMachine({
+    cooldownMs: 100,
+    shotAlgorithm: SHOT_ALGORITHMS.HYBRID,
+  })
+
+  update(machine, { x: 70, y: 90 }, 0)
+  const result = update(machine, { x: 70, y: 130 }, 40, {
+    ballMeasured: false,
+    ballTrackState: 'predicted',
+  })
+
+  assert.equal(result.event, 'miss')
+  assert.equal(result.reason, 'avishah_trajectory_miss')
+  assert.equal(result.evidence.algorithm, SHOT_ALGORITHMS.HYBRID)
+  assert.equal(result.evidence.avishahFallback, true)
 })
